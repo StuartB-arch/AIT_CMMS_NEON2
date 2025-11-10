@@ -11176,7 +11176,7 @@ class AITCMMSSystem:
 
     # 11. MARK ASSET AS FOUND
     def mark_asset_found(self):
-        """Mark a cannot find asset as found"""
+        """Mark a cannot find asset as found and reactivate with PM configuration"""
         selected = self.cannot_find_tree.selection()
         if not selected:
             messagebox.showwarning("Warning", "Please select an asset to mark as found")
@@ -11184,18 +11184,173 @@ class AITCMMSSystem:
 
         item = self.cannot_find_tree.item(selected[0])
         bfm_no = str(item['values'][0])
+        description = str(item['values'][1]) if len(item['values']) > 1 else "N/A"
 
-        try:
-            cursor = self.conn.cursor()
-            cursor.execute('UPDATE cannot_find_assets SET status = "Found" WHERE bfm_equipment_no = %s', (bfm_no,))
-            cursor.execute('UPDATE equipment SET status = "Active" WHERE bfm_equipment_no = %s', (bfm_no,))
-            self.conn.commit()
-        
-            messagebox.showinfo("Success", f"Asset {bfm_no} marked as found and reactivated")
-            self.load_cannot_find_assets()
-        
-        except Exception as e:
-            messagebox.showerror("Error", f"Failed to mark asset as found: {str(e)}")
+        # Create reactivation dialog
+        dialog = tk.Toplevel(self.root)
+        dialog.title(f"Reactivate Asset - {bfm_no}")
+        dialog.geometry("700x550")
+        dialog.transient(self.root)
+        dialog.grab_set()
+
+        # Center the dialog
+        dialog.update_idletasks()
+        x = (dialog.winfo_screenwidth() // 2) - (700 // 2)
+        y = (dialog.winfo_screenheight() // 2) - (550 // 2)
+        dialog.geometry(f"700x550+{x}+{y}")
+
+        # Header
+        header_frame = ttk.Frame(dialog, padding=15)
+        header_frame.pack(fill='x')
+
+        ttk.Label(header_frame, text=f"Reactivate Found Asset for PM Scheduling",
+                font=('Arial', 14, 'bold')).pack()
+        ttk.Label(header_frame, text=f"BFM: {bfm_no}",
+                font=('Arial', 10)).pack(pady=5)
+        ttk.Label(header_frame, text=f"Description: {description}",
+                font=('Arial', 9), wraplength=650).pack()
+
+        # Separator
+        ttk.Separator(dialog, orient='horizontal').pack(fill='x', pady=10)
+
+        # PM Frequency Selection Frame
+        pm_frame = ttk.LabelFrame(dialog, text="Select PM Frequencies to Enable", padding=20)
+        pm_frame.pack(fill='x', padx=20, pady=10)
+
+        ttk.Label(pm_frame, text="Choose which preventive maintenance schedules to enable:",
+                font=('Arial', 10)).pack(anchor='w', pady=(0, 15))
+
+        # PM Type Checkboxes
+        monthly_var = tk.BooleanVar(value=True)  # Default: Monthly enabled
+        six_month_var = tk.BooleanVar(value=False)  # Default: Six Month disabled
+        annual_var = tk.BooleanVar(value=True)  # Default: Annual enabled
+
+        # Monthly PM
+        monthly_frame = ttk.Frame(pm_frame)
+        monthly_frame.pack(fill='x', pady=5)
+        monthly_cb = ttk.Checkbutton(monthly_frame, text="Monthly PM (every 30 days)",
+                                    variable=monthly_var)
+        monthly_cb.pack(side='left')
+        ttk.Label(monthly_frame, text="Recommended for most equipment",
+                foreground='green', font=('Arial', 8, 'italic')).pack(side='left', padx=10)
+
+        # Six Month PM
+        six_month_frame = ttk.Frame(pm_frame)
+        six_month_frame.pack(fill='x', pady=5)
+        six_month_cb = ttk.Checkbutton(six_month_frame, text="Six Month PM (every 180 days)",
+                                       variable=six_month_var)
+        six_month_cb.pack(side='left')
+        ttk.Label(six_month_frame, text="For semi-annual maintenance",
+                foreground='blue', font=('Arial', 8, 'italic')).pack(side='left', padx=10)
+
+        # Annual PM
+        annual_frame = ttk.Frame(pm_frame)
+        annual_frame.pack(fill='x', pady=5)
+        annual_cb = ttk.Checkbutton(annual_frame, text="Annual PM (every 365 days)",
+                                    variable=annual_var)
+        annual_cb.pack(side='left')
+        ttk.Label(annual_frame, text="For yearly inspection",
+                foreground='orange', font=('Arial', 8, 'italic')).pack(side='left', padx=10)
+
+        # Information text
+        info_frame = ttk.Frame(dialog, padding=20)
+        info_frame.pack(fill='x', padx=20, pady=10)
+
+        info_text = ("The asset will be:\n"
+                    "• Removed from the Cannot Find list\n"
+                    "• Set to Active status in the main equipment list\n"
+                    "• Scheduled for the selected preventive maintenance frequencies")
+
+        ttk.Label(info_frame, text=info_text, font=('Arial', 9),
+                foreground='#444444', justify='left').pack(anchor='w')
+
+        def validate_and_reactivate():
+            """Validate selections and perform reactivation"""
+            # Validate at least one PM is selected
+            if not monthly_var.get() and not six_month_var.get() and not annual_var.get():
+                messagebox.showerror("Validation Error",
+                                   "You must select at least one PM frequency to reactivate.\n\n"
+                                   "If you don't want to schedule PMs, leave the asset in Cannot Find status.")
+                return
+
+            # Build PM list
+            pm_list = []
+            if monthly_var.get():
+                pm_list.append("Monthly")
+            if six_month_var.get():
+                pm_list.append("Six Month")
+            if annual_var.get():
+                pm_list.append("Annual")
+
+            pm_enabled = ", ".join(pm_list)
+
+            # Confirmation
+            confirm_msg = (f"Reactivate asset {bfm_no}?\n\n"
+                          f"Equipment will be:\n"
+                          f"• Set to Active status\n"
+                          f"• PM Frequencies: {pm_enabled}\n"
+                          f"• Removed from Cannot Find list\n\n"
+                          f"Continue?")
+
+            result = messagebox.askyesno("Confirm Reactivation", confirm_msg)
+
+            if not result:
+                return
+
+            # Perform reactivation
+            try:
+                cursor = self.conn.cursor()
+
+                # Update equipment status and enable selected PMs
+                cursor.execute('''
+                    UPDATE equipment SET
+                    status = 'Active',
+                    monthly_pm = %s,
+                    six_month_pm = %s,
+                    annual_pm = %s,
+                    updated_date = CURRENT_TIMESTAMP
+                    WHERE bfm_equipment_no = %s
+                ''', (
+                    1 if monthly_var.get() else 0,
+                    1 if six_month_var.get() else 0,
+                    1 if annual_var.get() else 0,
+                    bfm_no
+                ))
+
+                # Delete from cannot_find_assets table (not just update status)
+                cursor.execute('DELETE FROM cannot_find_assets WHERE bfm_equipment_no = %s', (bfm_no,))
+
+                self.conn.commit()
+
+                messagebox.showinfo(
+                    "Success",
+                    f"Asset {bfm_no} successfully reactivated!\n\n"
+                    f"Status: Active\n"
+                    f"PMs Enabled: {pm_enabled}\n\n"
+                    f"Equipment moved back to main equipment list"
+                )
+
+                dialog.destroy()
+
+                # Refresh all displays
+                self.refresh_equipment_list()
+                self.load_cannot_find_assets()
+                self.update_equipment_statistics()
+
+                self.update_status(f"Reactivated asset {bfm_no} with {pm_enabled} PMs")
+
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to reactivate asset: {str(e)}")
+
+        # Buttons
+        button_frame = ttk.Frame(dialog)
+        button_frame.pack(fill='x', padx=20, pady=15)
+
+        ttk.Button(button_frame, text="Reactivate Asset",
+                   command=validate_and_reactivate,
+                   style='Accent.TButton').pack(side='right', padx=5)
+        ttk.Button(button_frame, text="Cancel",
+                   command=dialog.destroy).pack(side='right')
 
     # 12. REACTIVATE ASSET
     def reactivate_asset(self):
