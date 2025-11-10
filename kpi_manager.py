@@ -568,35 +568,62 @@ class KPIManager:
 
             elif kpi_name == 'TTR (Time to Repair) Adherence':
                 p1_within = float(data_dict.get('p1_within_target') or 0)
-                p1_total = float(data_dict.get('p1_total') or 1)
-                if p1_total > 0:
-                    result = (p1_within / p1_total) * 100
+                p1_total = float(data_dict.get('p1_total') or 0)
+                p2_within = float(data_dict.get('p2_within_target') or 0)
+                p2_total = float(data_dict.get('p2_total') or 0)
+
+                # Calculate combined adherence for P1 and P2
+                total_within = p1_within + p2_within
+                total_failures = p1_total + p2_total
+
+                if total_failures > 0:
+                    result = (total_within / total_failures) * 100
                     meets_criteria = result >= 95
-                    calculated_text = f"{p1_within}/{p1_total} P1 assets within target"
+                    calculated_text = f"P1: {p1_within}/{p1_total}, P2: {p2_within}/{p2_total} within target ({result:.1f}%)"
+                else:
+                    # No failures means perfect adherence (100%)
+                    result = 100.0
+                    meets_criteria = True
+                    calculated_text = "No P1 or P2 failures - 100% adherence"
 
             elif kpi_name == 'MTBF Mean Time Between Failure':
                 p1_hours = float(data_dict.get('p1_operating_hours') or 0)
-                p1_failures = float(data_dict.get('p1_failure_count') or 1)
+                p1_failures = float(data_dict.get('p1_failure_count') or 0)
                 if p1_failures > 0:
                     result = p1_hours / p1_failures
                     meets_criteria = result > 80
                     calculated_text = f"{result:.1f} hours between failures (P1 assets)"
+                else:
+                    # No failures - cannot calculate MTBF
+                    result = None
+                    meets_criteria = None
+                    calculated_text = "No failures recorded - MTBF N/A"
 
             elif kpi_name == 'Technical Availability Adherence':
                 meeting = float(data_dict.get('p1_assets_meeting_target') or 0)
-                total = float(data_dict.get('p1_total_assets') or 1)
+                total = float(data_dict.get('p1_total_assets') or 0)
                 if total > 0:
                     result = (meeting / total) * 100
                     meets_criteria = result >= 95
                     calculated_text = f"{meeting}/{total} P1 assets meeting >95% availability"
+                else:
+                    # No assets to measure
+                    result = None
+                    meets_criteria = None
+                    calculated_text = "No P1 assets to measure - N/A"
 
             elif kpi_name == 'MRT (Mean Response Time)':
                 total_time = float(data_dict.get('total_response_time_minutes') or 0)
-                wo_count = float(data_dict.get('wo_count') or 1)
+                wo_count = float(data_dict.get('wo_count') or 0)
                 if wo_count > 0:
                     result = total_time / wo_count
                     meets_criteria = result <= 15  # P1 target
                     calculated_text = f"{result:.1f} minutes average response time"
+                else:
+                    # No work orders to measure
+                    result = None
+                    meets_criteria = None
+                    calculated_text = "No work orders - MRT N/A"
 
             elif kpi_name == 'Non Conformances raised':
                 result = float(data_dict.get('nc_count') or 0)
@@ -605,19 +632,29 @@ class KPIManager:
 
             elif kpi_name == 'Non Conformances closed':
                 closed = float(data_dict.get('nc_closed_on_time') or 0)
-                total = float(data_dict.get('nc_total') or 1)
+                total = float(data_dict.get('nc_total') or 0)
                 if total > 0:
                     result = (closed / total) * 100
                     meets_criteria = result == 100
                     calculated_text = f"{closed}/{total} closed on time"
+                else:
+                    # No non-conformances means 100% compliance
+                    result = 100.0
+                    meets_criteria = True
+                    calculated_text = "No non-conformances - 100% compliance"
 
             elif kpi_name == 'Mean Time to Deliver a Quote':
                 total_hours = float(data_dict.get('total_quote_time_hours') or 0)
-                quote_count = float(data_dict.get('quote_count') or 1)
+                quote_count = float(data_dict.get('quote_count') or 0)
                 if quote_count > 0:
                     result = total_hours / quote_count
                     meets_criteria = result <= 48
                     calculated_text = f"{result:.1f} hours average delivery time"
+                else:
+                    # No quotes to measure
+                    result = None
+                    meets_criteria = None
+                    calculated_text = "No quotes delivered - N/A"
 
             elif kpi_name == 'Purchaser satisfaction':
                 result = float(data_dict.get('satisfaction_score') or 0)
