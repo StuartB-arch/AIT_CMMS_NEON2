@@ -11311,9 +11311,9 @@ class AITCMMSSystem:
                     updated_date = CURRENT_TIMESTAMP
                     WHERE bfm_equipment_no = %s
                 ''', (
-                    1 if monthly_var.get() else 0,
-                    1 if six_month_var.get() else 0,
-                    1 if annual_var.get() else 0,
+                    monthly_var.get(),
+                    six_month_var.get(),
+                    annual_var.get(),
                     bfm_no
                 ))
 
@@ -11547,7 +11547,7 @@ class AITCMMSSystem:
                     try:
                         # Update equipment status and enable selected PMs
                         cursor.execute('''
-                            UPDATE equipment SET 
+                            UPDATE equipment SET
                             status = 'Active',
                             monthly_pm = %s,
                             six_month_pm = %s,
@@ -11555,9 +11555,9 @@ class AITCMMSSystem:
                             updated_date = CURRENT_TIMESTAMP
                             WHERE bfm_equipment_no = %s
                         ''', (
-                            1 if monthly_var.get() else 0,
-                            1 if six_month_var.get() else 0,
-                            1 if annual_var.get() else 0,
+                            monthly_var.get(),
+                            six_month_var.get(),
+                            annual_var.get(),
                             bfm_no
                         ))
                     
