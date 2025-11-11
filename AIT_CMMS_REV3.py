@@ -11,6 +11,12 @@ from kpi_database_migration import migrate_kpi_database
 from kpi_manager import KPIManager
 from user_management_ui import UserManagementDialog
 from password_change_ui import show_password_change_dialog
+# New modular features for enhanced functionality
+from equipment_manager import EquipmentManager
+from backup_manager import BackupManager
+from equipment_history import show_equipment_history, EquipmentHistory
+from kpi_auto_collector import KPIAutoCollector
+from kpi_trend_analyzer import show_kpi_trends, KPITrendAnalyzer
 import shutil
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
@@ -5209,6 +5215,19 @@ class AITCMMSSystem:
         if self.current_user_role == 'Manager':
             self.init_kpi_system()
 
+        # Initialize new modular features
+        try:
+            self.equipment_manager = EquipmentManager(self.conn)
+            self.kpi_collector = KPIAutoCollector(self.conn)
+            self.kpi_trend_analyzer = KPITrendAnalyzer(self.conn)
+            print("✓ New modular features initialized successfully")
+        except Exception as e:
+            print(f"⚠ Warning: Could not initialize new modular features: {e}")
+            # Non-critical, continue anyway
+            self.equipment_manager = None
+            self.kpi_collector = None
+            self.kpi_trend_analyzer = None
+
         # Add logo header
         self.add_logo_to_main_window()
     
@@ -7926,6 +7945,33 @@ class AITCMMSSystem:
         account_menu.add_command(label="Change Password", command=self.open_change_password)
         account_menu.add_separator()
         account_menu.add_command(label="Logout", command=self.logout)
+
+        # Tools menu - NEW MODULAR FEATURES
+        tools_menu = tk.Menu(menubar, tearoff=0)
+        menubar.add_cascade(label="Tools", menu=tools_menu)
+
+        # Equipment tools
+        tools_menu.add_command(label="Equipment Manager",
+                              command=self.show_equipment_manager_dialog,
+                              font=('Arial', 10))
+        tools_menu.add_command(label="Equipment History",
+                              command=self.show_equipment_history_dialog,
+                              font=('Arial', 10))
+
+        # KPI tools (visible to all, but will check role in methods)
+        tools_menu.add_separator()
+        tools_menu.add_command(label="Auto-Collect KPIs",
+                              command=self.auto_collect_kpis_dialog,
+                              font=('Arial', 10))
+        tools_menu.add_command(label="KPI Trends & Alerts",
+                              command=self.show_kpi_trends_dialog,
+                              font=('Arial', 10))
+
+        # Backup tools
+        tools_menu.add_separator()
+        tools_menu.add_command(label="Backup Manager",
+                              command=self.show_backup_manager_dialog,
+                              font=('Arial', 10))
 
         # Toolbar frame at the top (for Manager actions)
         if self.current_user_role == 'Manager':
@@ -17063,7 +17109,361 @@ class AITCMMSSystem:
             self.conn.rollback()
             messagebox.showerror("Error", f"Failed to clear MRO inventory: {str(e)}")
             print(f"Clear MRO inventory error: {e}")
-    
+
+    # ========================================================================
+    # NEW MODULAR FEATURES - Callback Methods
+    # ========================================================================
+
+    def show_equipment_manager_dialog(self):
+        """Show equipment manager statistics and attention items"""
+        try:
+            if not hasattr(self, 'equipment_manager') or self.equipment_manager is None:
+                messagebox.showerror("Error", "Equipment manager not initialized")
+                return
+
+            # Create dialog
+            dialog = tk.Toplevel(self.root)
+            dialog.title("Equipment Manager")
+            dialog.geometry("800x600")
+            dialog.transient(self.root)
+            dialog.grab_set()
+
+            # Center dialog
+            dialog.update_idletasks()
+            x = (dialog.winfo_screenwidth() // 2) - 400
+            y = (dialog.winfo_screenheight() // 2) - 300
+            dialog.geometry(f"800x600+{x}+{y}")
+
+            # Header
+            ttk.Label(dialog, text="Equipment Manager",
+                     font=('Arial', 14, 'bold')).pack(pady=10)
+
+            # Statistics text
+            stats_text = tk.Text(dialog, wrap='word', font=('Courier', 10))
+            stats_text.pack(fill='both', expand=True, padx=10, pady=10)
+
+            # Get statistics
+            stats = self.equipment_manager.get_equipment_statistics()
+            attention = self.equipment_manager.get_equipment_requiring_attention()
+
+            report = f"""
+EQUIPMENT STATISTICS
+{'='*70}
+
+OVERALL COUNTS:
+  Total Equipment: {stats['total']}
+  Active: {stats['active']}
+  Run to Failure: {stats['run_to_failure']}
+  Missing: {stats['missing']}
+
+PM CONFIGURATION:
+  With Monthly PM: {stats['monthly_pm']}
+  With Annual PM: {stats['annual_pm']}
+
+{'='*70}
+EQUIPMENT REQUIRING ATTENTION
+{'='*70}
+
+OVERDUE MONTHLY PMs: {len(attention['overdue_monthly'])}
+"""
+            for eq in attention['overdue_monthly'][:10]:
+                report += f"  • {eq['bfm_no']}: {eq['description'][:40]} ({eq['days_overdue']} days overdue)\n"
+
+            if len(attention['overdue_monthly']) > 10:
+                report += f"  ... and {len(attention['overdue_monthly']) - 10} more\n"
+
+            report += f"\nOVERDUE ANNUAL PMs: {len(attention['overdue_annual'])}\n"
+            for eq in attention['overdue_annual'][:10]:
+                report += f"  • {eq['bfm_no']}: {eq['description'][:40]} ({eq['days_overdue']} days overdue)\n"
+
+            if len(attention['overdue_annual']) > 10:
+                report += f"  ... and {len(attention['overdue_annual']) - 10} more\n"
+
+            report += f"\nMISSING EQUIPMENT: {len(attention['missing'])}\n"
+            for eq in attention['missing'][:10]:
+                report += f"  • {eq['bfm_no']}: {eq['description'][:40]}\n"
+
+            if len(attention['missing']) > 10:
+                report += f"  ... and {len(attention['missing']) - 10} more\n"
+
+            report += f"\nNO PM HISTORY: {len(attention['no_pm_history'])}\n"
+            for eq in attention['no_pm_history'][:10]:
+                report += f"  • {eq['bfm_no']}: {eq['description'][:40]}\n"
+
+            if len(attention['no_pm_history']) > 10:
+                report += f"  ... and {len(attention['no_pm_history']) - 10} more\n"
+
+            stats_text.insert('1.0', report)
+            stats_text.config(state='disabled')
+
+            # Button
+            ttk.Button(dialog, text="Close", command=dialog.destroy).pack(pady=10)
+
+        except Exception as e:
+            messagebox.showerror("Error", f"Error opening equipment manager: {str(e)}")
+            print(f"Equipment manager error: {e}")
+
+    def show_equipment_history_dialog(self):
+        """Show equipment history for selected or entered equipment"""
+        try:
+            if not hasattr(self, 'equipment_manager') or self.equipment_manager is None:
+                messagebox.showerror("Error", "Equipment manager not initialized")
+                return
+
+            # Ask for BFM number
+            from tkinter import simpledialog
+            bfm_no = simpledialog.askstring(
+                "Equipment History",
+                "Enter Equipment BFM Number:",
+                parent=self.root
+            )
+
+            if bfm_no:
+                # Validate BFM exists
+                if self.equipment_manager.validate_bfm_number(bfm_no):
+                    show_equipment_history(self.root, self.conn, str(bfm_no))
+                else:
+                    messagebox.showerror("Not Found",
+                        f"Equipment '{bfm_no}' not found in database.\n\n"
+                        "Please check the BFM number and try again.")
+
+        except Exception as e:
+            messagebox.showerror("Error", f"Error opening equipment history: {str(e)}")
+            print(f"Equipment history error: {e}")
+
+    def auto_collect_kpis_dialog(self):
+        """Auto-collect KPIs for selected period"""
+        try:
+            # Check role
+            if self.current_user_role != 'Manager':
+                messagebox.showerror("Access Denied",
+                    "Only managers can access KPI features.\n\n"
+                    f"Your role: {self.current_user_role}")
+                return
+
+            if not hasattr(self, 'kpi_collector') or self.kpi_collector is None:
+                messagebox.showerror("Error", "KPI collector not initialized")
+                return
+
+            # Create dialog
+            dialog = tk.Toplevel(self.root)
+            dialog.title("Auto-Collect KPIs")
+            dialog.geometry("600x500")
+            dialog.transient(self.root)
+            dialog.grab_set()
+
+            # Center dialog
+            dialog.update_idletasks()
+            x = (dialog.winfo_screenwidth() // 2) - 300
+            y = (dialog.winfo_screenheight() // 2) - 250
+            dialog.geometry(f"600x500+{x}+{y}")
+
+            # Header
+            header = ttk.Label(dialog, text="Auto-Collect KPIs from Database",
+                              font=('Arial', 14, 'bold'))
+            header.pack(pady=20)
+
+            # Info
+            info = ttk.Label(dialog,
+                           text="Automatically calculate KPIs from existing maintenance data.\n"
+                                "This eliminates manual data entry and improves accuracy.",
+                           justify='center')
+            info.pack(pady=10)
+
+            # Period selection
+            period_frame = ttk.LabelFrame(dialog, text="Select Period", padding=10)
+            period_frame.pack(pady=20, padx=20, fill='x')
+
+            ttk.Label(period_frame, text="Month:").grid(row=0, column=0, padx=5, pady=5, sticky='e')
+
+            # Generate last 12 months
+            months = []
+            for i in range(12):
+                date = datetime.now() - timedelta(days=30*i)
+                months.append(date.strftime('%Y-%m'))
+
+            period_var = tk.StringVar(value=months[0])
+            period_combo = ttk.Combobox(period_frame, textvariable=period_var,
+                                       values=months, width=15, state='readonly')
+            period_combo.grid(row=0, column=1, padx=5, pady=5)
+
+            # Preview text
+            preview_text = tk.Text(dialog, height=10, width=70, wrap='word')
+            preview_text.pack(pady=10, padx=20)
+
+            def preview():
+                try:
+                    preview_text.delete('1.0', 'end')
+                    preview_text.insert('1.0', f"Previewing KPIs for {period_var.get()}...\n\n")
+                    dialog.update()
+
+                    result = self.kpi_collector.preview_auto_collection(period_var.get())
+
+                    if 'error' in result:
+                        preview_text.insert('end', f"Error: {result['error']}")
+                    else:
+                        preview_text.insert('end', f"Found {len(result['kpis'])} auto-collectible KPIs:\n\n")
+                        for kpi in result['kpis']:
+                            preview_text.insert('end', f"{kpi['name']}: {kpi['value']} {kpi['unit']}\n")
+                except Exception as e:
+                    preview_text.delete('1.0', 'end')
+                    preview_text.insert('1.0', f"Error: {str(e)}")
+
+            # Buttons
+            button_frame = ttk.Frame(dialog)
+            button_frame.pack(pady=20)
+
+            ttk.Button(button_frame, text="Preview",
+                      command=preview).pack(side='left', padx=5)
+
+            def save():
+                if messagebox.askyesno("Confirm",
+                    f"Auto-collect and save KPIs for {period_var.get()}?\n\n"
+                    "This will update the KPI database."):
+                    try:
+                        result = self.kpi_collector.save_auto_collected_kpis(
+                            period_var.get(),
+                            user_id=self.current_user
+                        )
+
+                        if result['success']:
+                            messagebox.showinfo("Success",
+                                f"Successfully auto-collected {result['saved_count']} KPIs!\n\n"
+                                f"Period: {result['period']}\n\n"
+                                "You can now view these in the KPI dashboard.")
+                            dialog.destroy()
+                        else:
+                            messagebox.showerror("Error", f"Error: {result.get('error', 'Unknown error')}")
+                    except Exception as e:
+                        messagebox.showerror("Error", f"Error saving KPIs: {str(e)}")
+
+            ttk.Button(button_frame, text="Save to Database",
+                      command=save).pack(side='left', padx=5)
+
+            ttk.Button(button_frame, text="Close",
+                      command=dialog.destroy).pack(side='left', padx=5)
+
+        except Exception as e:
+            messagebox.showerror("Error", f"Error opening KPI collector: {str(e)}")
+            print(f"KPI collector error: {e}")
+
+    def show_kpi_trends_dialog(self):
+        """Show KPI trends and alerts window"""
+        try:
+            # Check role
+            if self.current_user_role != 'Manager':
+                messagebox.showerror("Access Denied",
+                    "Only managers can access KPI features.\n\n"
+                    f"Your role: {self.current_user_role}")
+                return
+
+            if not hasattr(self, 'kpi_trend_analyzer') or self.kpi_trend_analyzer is None:
+                messagebox.showerror("Error", "KPI trend analyzer not initialized")
+                return
+
+            show_kpi_trends(self.root, self.conn)
+
+        except Exception as e:
+            messagebox.showerror("Error", f"Error opening KPI trends: {str(e)}")
+            print(f"KPI trends error: {e}")
+
+    def show_backup_manager_dialog(self):
+        """Show backup manager information"""
+        try:
+            # Create dialog
+            dialog = tk.Toplevel(self.root)
+            dialog.title("Backup Manager")
+            dialog.geometry("900x500")
+            dialog.transient(self.root)
+            dialog.grab_set()
+
+            # Center dialog
+            dialog.update_idletasks()
+            x = (dialog.winfo_screenwidth() // 2) - 450
+            y = (dialog.winfo_screenheight() // 2) - 250
+            dialog.geometry(f"900x500+{x}+{y}")
+
+            # Header
+            ttk.Label(dialog, text="Database Backup Manager",
+                     font=('Arial', 14, 'bold')).pack(pady=20)
+
+            # Info text
+            info_text = tk.Text(dialog, wrap='word', height=20, width=100)
+            info_text.pack(padx=20, pady=10, fill='both', expand=True)
+
+            info_text.insert('1.0', """
+DATABASE BACKUP MANAGER
+================================================================================
+
+The backup manager provides automated database backups with:
+  • Scheduled backups (daily/weekly/monthly)
+  • Automatic retention and cleanup
+  • Backup verification
+  • Easy restore capabilities
+
+SETTING UP AUTOMATED BACKUPS:
+================================================================================
+
+1. Initialize the BackupManager in your application code:
+
+   from backup_manager import BackupManager
+
+   # Initialize with database configuration
+   backup_mgr = BackupManager(self.DB_CONFIG, backup_dir='./backups')
+
+   # Configure backup settings
+   backup_mgr.update_config({
+       'enabled': True,
+       'schedule': 'daily',        # daily, weekly, or monthly
+       'backup_time': '02:00',     # Time to run (HH:MM)
+       'retention_days': 30,       # Keep backups for 30 days
+       'max_backups': 50,          # Maximum number to keep
+       'verify_after_backup': True # Verify after creation
+   })
+
+   # Start automatic backups
+   backup_mgr.start_automatic_backups()
+
+2. Backups will run automatically in the background
+
+3. View backups:
+   backups = backup_mgr.list_backups()
+
+4. Create manual backup:
+   success, path, msg = backup_mgr.create_backup('manual_backup')
+
+5. Restore from backup:
+   backup_mgr.restore_backup(backup_path, confirm=True)
+
+REQUIREMENTS:
+================================================================================
+  • PostgreSQL command-line tools (pg_dump, pg_restore)
+  • Must be installed and accessible in system PATH
+  • Sufficient disk space for backups
+
+CURRENT DATABASE:
+================================================================================
+  Host: {0}
+  Database: {1}
+  Connection: PostgreSQL (Neon Cloud)
+
+For detailed documentation, see:
+  • MODULAR_ARCHITECTURE_GUIDE.md
+  • backup_manager.py module
+  • example_integration.py for usage examples
+
+================================================================================
+""".format(self.DB_CONFIG['host'], self.DB_CONFIG['database']))
+            info_text.config(state='disabled')
+
+            # Button
+            ttk.Button(dialog, text="Close", command=dialog.destroy).pack(pady=10)
+
+        except Exception as e:
+            messagebox.showerror("Error", f"Error opening backup manager: {str(e)}")
+            print(f"Backup manager error: {e}")
+
+
 # Main application startup
 if __name__ == "__main__":
     root = tk.Tk()
