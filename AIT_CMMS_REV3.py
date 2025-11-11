@@ -17391,7 +17391,7 @@ OVERDUE MONTHLY PMs: {len(attention['overdue_monthly'])}
             info_text = tk.Text(dialog, wrap='word', height=20, width=100)
             info_text.pack(padx=20, pady=10, fill='both', expand=True)
 
-            info_text.insert('1.0', """
+            info_text.insert('1.0', f"""
 DATABASE BACKUP MANAGER
 ================================================================================
 
@@ -17412,14 +17412,14 @@ SETTING UP AUTOMATED BACKUPS:
    backup_mgr = BackupManager(self.DB_CONFIG, backup_dir='./backups')
 
    # Configure backup settings
-   backup_mgr.update_config({
+   backup_mgr.update_config({{
        'enabled': True,
        'schedule': 'daily',        # daily, weekly, or monthly
        'backup_time': '02:00',     # Time to run (HH:MM)
        'retention_days': 30,       # Keep backups for 30 days
        'max_backups': 50,          # Maximum number to keep
        'verify_after_backup': True # Verify after creation
-   })
+   }})
 
    # Start automatic backups
    backup_mgr.start_automatic_backups()
@@ -17443,8 +17443,8 @@ REQUIREMENTS:
 
 CURRENT DATABASE:
 ================================================================================
-  Host: {0}
-  Database: {1}
+  Host: {self.DB_CONFIG['host']}
+  Database: {self.DB_CONFIG['database']}
   Connection: PostgreSQL (Neon Cloud)
 
 For detailed documentation, see:
@@ -17453,7 +17453,7 @@ For detailed documentation, see:
   • example_integration.py for usage examples
 
 ================================================================================
-""".format(self.DB_CONFIG['host'], self.DB_CONFIG['database']))
+""")
             info_text.config(state='disabled')
 
             # Button

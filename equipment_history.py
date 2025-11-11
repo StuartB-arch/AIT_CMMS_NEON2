@@ -67,8 +67,7 @@ class EquipmentHistory:
         cursor = self.conn.cursor()
 
         query = '''
-            SELECT completion_date, pm_type, technician_name, labor_hours,
-                   notes, special_equipment_used
+            SELECT completion_date, pm_type, technician_name, labor_hours, notes
             FROM pm_completions
             WHERE bfm_equipment_no = %s
         '''
@@ -93,8 +92,7 @@ class EquipmentHistory:
                 'pm_type': row[1],
                 'technician': row[2],
                 'labor_hours': row[3],
-                'notes': row[4],
-                'special_equipment': row[5]
+                'notes': row[4]
             })
 
         return results

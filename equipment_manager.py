@@ -48,14 +48,24 @@ class EquipmentManager:
                 'bfm_no': row[0],
                 'description': row[1],
                 'location': row[2],
-                'has_monthly': row[3] == 'X' if row[3] else False,
-                'has_annual': row[4] == 'X' if row[4] else False,
+                'has_monthly': self._parse_boolean(row[3]),
+                'has_annual': self._parse_boolean(row[4]),
                 'last_monthly_pm': row[5],
                 'last_annual_pm': row[6],
                 'next_annual_pm': row[7],
                 'status': row[8]
             }
         return None
+
+    def _parse_boolean(self, value):
+        """Parse boolean value from database (handles both boolean and 'X' string format)"""
+        if value is None:
+            return False
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str):
+            return value.strip().upper() == 'X'
+        return bool(value)
 
     def search_equipment(self, search_term: str, status_filter: Optional[str] = None) -> List[Dict]:
         """
@@ -129,8 +139,8 @@ class EquipmentManager:
                 'bfm_no': row[0],
                 'description': row[1],
                 'location': row[2],
-                'has_monthly': row[3] == 'X' if row[3] else False,
-                'has_annual': row[4] == 'X' if row[4] else False,
+                'has_monthly': self._parse_boolean(row[3]),
+                'has_annual': self._parse_boolean(row[4]),
                 'last_monthly_pm': row[5],
                 'last_annual_pm': row[6],
                 'status': row[7]
@@ -249,12 +259,12 @@ class EquipmentManager:
         cursor.execute("SELECT COUNT(*) FROM equipment WHERE status = 'Missing'")
         stats['missing'] = cursor.fetchone()[0]
 
-        # Equipment with Monthly PM
-        cursor.execute("SELECT COUNT(*) FROM equipment WHERE monthly_pm = 'X' AND status = 'Active'")
+        # Equipment with Monthly PM (handle both boolean and 'X' format)
+        cursor.execute("SELECT COUNT(*) FROM equipment WHERE (monthly_pm = TRUE OR monthly_pm = 'X') AND status = 'Active'")
         stats['monthly_pm'] = cursor.fetchone()[0]
 
-        # Equipment with Annual PM
-        cursor.execute("SELECT COUNT(*) FROM equipment WHERE annual_pm = 'X' AND status = 'Active'")
+        # Equipment with Annual PM (handle both boolean and 'X' format)
+        cursor.execute("SELECT COUNT(*) FROM equipment WHERE (annual_pm = TRUE OR annual_pm = 'X') AND status = 'Active'")
         stats['annual_pm'] = cursor.fetchone()[0]
 
         return stats
@@ -280,7 +290,7 @@ class EquipmentManager:
             SELECT bfm_equipment_no, description, last_monthly_pm,
                    CURRENT_DATE - last_monthly_pm::date as days_overdue
             FROM equipment
-            WHERE monthly_pm = 'X'
+            WHERE (monthly_pm = TRUE OR monthly_pm = 'X')
             AND status = 'Active'
             AND last_monthly_pm IS NOT NULL
             AND CURRENT_DATE - last_monthly_pm::date > 35
@@ -301,7 +311,7 @@ class EquipmentManager:
             SELECT bfm_equipment_no, description, last_annual_pm,
                    CURRENT_DATE - last_annual_pm::date as days_overdue
             FROM equipment
-            WHERE annual_pm = 'X'
+            WHERE (annual_pm = TRUE OR annual_pm = 'X')
             AND status = 'Active'
             AND last_annual_pm IS NOT NULL
             AND CURRENT_DATE - last_annual_pm::date > 370
@@ -337,11 +347,11 @@ class EquipmentManager:
             SELECT bfm_equipment_no, description, monthly_pm, annual_pm
             FROM equipment
             WHERE status = 'Active'
-            AND (monthly_pm = 'X' OR annual_pm = 'X')
+            AND ((monthly_pm = TRUE OR monthly_pm = 'X') OR (annual_pm = TRUE OR annual_pm = 'X'))
             AND (
-                (monthly_pm = 'X' AND (last_monthly_pm IS NULL OR last_monthly_pm = ''))
+                ((monthly_pm = TRUE OR monthly_pm = 'X') AND (last_monthly_pm IS NULL OR last_monthly_pm = ''))
                 OR
-                (annual_pm = 'X' AND (last_annual_pm IS NULL OR last_annual_pm = ''))
+                ((annual_pm = TRUE OR annual_pm = 'X') AND (last_annual_pm IS NULL OR last_annual_pm = ''))
             )
             ORDER BY bfm_equipment_no
             LIMIT 50
@@ -351,8 +361,8 @@ class EquipmentManager:
             results['no_pm_history'].append({
                 'bfm_no': row[0],
                 'description': row[1],
-                'has_monthly': row[2] == 'X',
-                'has_annual': row[3] == 'X'
+                'has_monthly': self._parse_boolean(row[2]),
+                'has_annual': self._parse_boolean(row[3])
             })
 
         return results
