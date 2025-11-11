@@ -1,6 +1,6 @@
 """
-KPI Management UI for Managers
-Provides dashboard, data input, and export capabilities
+KPI Management UI for Managers - Manual Data Entry with Chart Generation
+Professional dashboard for entering KPI data and visualizing results
 """
 
 from PyQt5.QtWidgets import *
@@ -18,9 +18,16 @@ from reportlab.lib.enums import TA_CENTER, TA_LEFT
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 
+# Matplotlib imports for chart generation
+import matplotlib
+matplotlib.use('Qt5Agg')
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.figure import Figure
+import matplotlib.pyplot as plt
+
 
 class KPIDashboard(QWidget):
-    """Main KPI Dashboard for Managers"""
+    """Professional KPI Dashboard with Manual Data Entry and Chart Generation"""
 
     def __init__(self, pool, current_user, parent=None):
         super().__init__(parent)
@@ -28,61 +35,397 @@ class KPIDashboard(QWidget):
         self.current_user = current_user
         self.kpi_manager = KPIManager(pool)
         self.current_period = datetime.now().strftime('%Y-%m')
+        self.chart_canvas = None
         self.init_ui()
 
     def init_ui(self):
-        """Initialize the user interface"""
-        layout = QVBoxLayout()
+        """Initialize the professional user interface"""
+        main_layout = QVBoxLayout()
+        main_layout.setSpacing(15)
 
-        # Title
-        title_label = QLabel("2025 KPI Dashboard - Manager View")
-        title_label.setStyleSheet("font-size: 18pt; font-weight: bold; color: #2c3e50;")
+        # Header Section with gradient background
+        header_widget = QWidget()
+        header_widget.setStyleSheet("""
+            QWidget {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #2c3e50, stop:1 #3498db);
+                border-radius: 10px;
+                padding: 20px;
+            }
+        """)
+        header_layout = QVBoxLayout()
+
+        title_label = QLabel("📊 KPI Dashboard 2025 - Professional Edition")
+        title_label.setStyleSheet("font-size: 24pt; font-weight: bold; color: white;")
         title_label.setAlignment(Qt.AlignCenter)
-        layout.addWidget(title_label)
+        header_layout.addWidget(title_label)
 
-        # Period selector
-        period_layout = QHBoxLayout()
-        period_layout.addWidget(QLabel("Measurement Period:"))
+        subtitle_label = QLabel("Manual Data Entry & Real-Time Visualization")
+        subtitle_label.setStyleSheet("font-size: 12pt; color: #ecf0f1;")
+        subtitle_label.setAlignment(Qt.AlignCenter)
+        header_layout.addWidget(subtitle_label)
+
+        header_widget.setLayout(header_layout)
+        main_layout.addWidget(header_widget)
+
+        # Period and Controls Section
+        controls_widget = QWidget()
+        controls_widget.setStyleSheet("""
+            QWidget {
+                background-color: #f8f9fa;
+                border-radius: 8px;
+                padding: 15px;
+            }
+        """)
+        controls_layout = QHBoxLayout()
+
+        period_label = QLabel("📅 Measurement Period:")
+        period_label.setStyleSheet("font-size: 11pt; font-weight: bold; color: #2c3e50;")
+        controls_layout.addWidget(period_label)
 
         self.period_combo = QComboBox()
+        self.period_combo.setMinimumWidth(200)
+        self.period_combo.setStyleSheet("""
+            QComboBox {
+                padding: 8px;
+                border: 2px solid #3498db;
+                border-radius: 5px;
+                font-size: 10pt;
+                background-color: white;
+            }
+        """)
         self.populate_periods()
         self.period_combo.currentTextChanged.connect(self.on_period_changed)
-        period_layout.addWidget(self.period_combo)
+        controls_layout.addWidget(self.period_combo)
 
-        period_layout.addStretch()
+        controls_layout.addStretch()
 
-        # Refresh button
-        refresh_btn = QPushButton("🔄 Refresh Data")
+        refresh_btn = QPushButton("🔄 Refresh Dashboard")
+        refresh_btn.setStyleSheet(self.get_button_style("#95a5a6"))
         refresh_btn.clicked.connect(self.refresh_dashboard)
-        period_layout.addWidget(refresh_btn)
+        refresh_btn.setMinimumHeight(40)
+        controls_layout.addWidget(refresh_btn)
 
-        # Calculate Auto KPIs button
-        calc_btn = QPushButton("📊 Calculate Auto KPIs")
-        calc_btn.clicked.connect(self.calculate_auto_kpis)
-        calc_btn.setStyleSheet("background-color: #3498db; color: white; font-weight: bold; padding: 8px;")
-        period_layout.addWidget(calc_btn)
+        controls_widget.setLayout(controls_layout)
+        main_layout.addWidget(controls_widget)
 
-        layout.addLayout(period_layout)
-
-        # Tab widget for different sections
+        # Main Content Area with Tabs
         tab_widget = QTabWidget()
+        tab_widget.setStyleSheet("""
+            QTabWidget::pane {
+                border: 2px solid #bdc3c7;
+                border-radius: 8px;
+                background-color: white;
+            }
+            QTabBar::tab {
+                background: #ecf0f1;
+                color: #2c3e50;
+                padding: 12px 20px;
+                margin-right: 2px;
+                border-top-left-radius: 8px;
+                border-top-right-radius: 8px;
+                font-weight: bold;
+            }
+            QTabBar::tab:selected {
+                background: #3498db;
+                color: white;
+            }
+        """)
 
-        # Tab 1: KPI Overview
+        # Tab 1: Data Entry & Visualization
+        self.entry_tab = self.create_data_entry_tab()
+        tab_widget.addTab(self.entry_tab, "📝 Data Entry & Charts")
+
+        # Tab 2: Overview Dashboard
         self.overview_tab = self.create_overview_tab()
-        tab_widget.addTab(self.overview_tab, "📈 KPI Overview")
+        tab_widget.addTab(self.overview_tab, "📊 KPI Overview")
 
-        # Tab 2: Manual Data Input
-        self.input_tab = self.create_input_tab()
-        tab_widget.addTab(self.input_tab, "📝 Manual Data Input")
-
-        # Tab 3: Export
+        # Tab 3: Export Reports
         self.export_tab = self.create_export_tab()
         tab_widget.addTab(self.export_tab, "📄 Export Reports")
 
-        layout.addWidget(tab_widget)
-
-        self.setLayout(layout)
+        main_layout.addWidget(tab_widget)
+        self.setLayout(main_layout)
         self.refresh_dashboard()
+
+    def get_button_style(self, color):
+        """Get professional button style"""
+        return f"""
+            QPushButton {{
+                background-color: {color};
+                color: white;
+                border: none;
+                border-radius: 6px;
+                padding: 10px 20px;
+                font-size: 10pt;
+                font-weight: bold;
+            }}
+            QPushButton:hover {{
+                background-color: {self.darken_color(color)};
+            }}
+            QPushButton:pressed {{
+                background-color: {self.darken_color(color, 0.7)};
+            }}
+        """
+
+    def darken_color(self, hex_color, factor=0.8):
+        """Darken a hex color"""
+        hex_color = hex_color.lstrip('#')
+        rgb = tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
+        darker_rgb = tuple(int(c * factor) for c in rgb)
+        return f"#{darker_rgb[0]:02x}{darker_rgb[1]:02x}{darker_rgb[2]:02x}"
+
+    def create_data_entry_tab(self):
+        """Create the main data entry and visualization tab"""
+        widget = QWidget()
+        layout = QVBoxLayout()
+        layout.setSpacing(15)
+
+        # KPI Selection Section
+        selection_group = QGroupBox("📋 Select KPI for Data Entry")
+        selection_group.setStyleSheet("""
+            QGroupBox {
+                font-size: 12pt;
+                font-weight: bold;
+                border: 2px solid #3498db;
+                border-radius: 8px;
+                margin-top: 10px;
+                padding: 15px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 5px;
+            }
+        """)
+        selection_layout = QVBoxLayout()
+
+        info_label = QLabel("Select a KPI below to enter data manually. After entering data, click 'Calculate & Generate Chart' to see results and visualizations.")
+        info_label.setWordWrap(True)
+        info_label.setStyleSheet("background-color: #e8f4f8; padding: 10px; border-radius: 5px; font-size: 10pt;")
+        selection_layout.addWidget(info_label)
+
+        kpi_select_layout = QHBoxLayout()
+        kpi_select_layout.addWidget(QLabel("KPI:"))
+
+        self.kpi_selector = QComboBox()
+        self.kpi_selector.setMinimumHeight(40)
+        self.kpi_selector.setStyleSheet("""
+            QComboBox {
+                padding: 8px;
+                border: 2px solid #3498db;
+                border-radius: 5px;
+                font-size: 11pt;
+                background-color: white;
+            }
+        """)
+        self.populate_kpi_selector()
+        self.kpi_selector.currentTextChanged.connect(self.on_kpi_selected)
+        kpi_select_layout.addWidget(self.kpi_selector, 1)
+
+        selection_layout.addLayout(kpi_select_layout)
+        selection_group.setLayout(selection_layout)
+        layout.addWidget(selection_group)
+
+        # Splitter for Data Entry and Chart
+        splitter = QSplitter(Qt.Horizontal)
+
+        # Left side: Data Entry Form
+        entry_widget = QWidget()
+        entry_layout = QVBoxLayout()
+
+        # KPI Info Display
+        self.kpi_info_group = QGroupBox("ℹ️ KPI Information")
+        self.kpi_info_group.setStyleSheet("""
+            QGroupBox {
+                font-size: 11pt;
+                font-weight: bold;
+                border: 2px solid #27ae60;
+                border-radius: 8px;
+                margin-top: 10px;
+                padding: 10px;
+                background-color: #f1f9f5;
+            }
+        """)
+        self.kpi_info_layout = QVBoxLayout()
+        self.kpi_info_group.setLayout(self.kpi_info_layout)
+        entry_layout.addWidget(self.kpi_info_group)
+
+        # Data Input Form
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setStyleSheet("QScrollArea { border: none; }")
+
+        self.input_form_widget = QWidget()
+        self.input_form_widget.setStyleSheet("background-color: white;")
+        self.input_form_layout = QVBoxLayout()
+        self.input_form_widget.setLayout(self.input_form_layout)
+        scroll.setWidget(self.input_form_widget)
+        entry_layout.addWidget(scroll)
+
+        # Action Buttons
+        button_layout = QHBoxLayout()
+
+        save_btn = QPushButton("💾 Save Data")
+        save_btn.setStyleSheet(self.get_button_style("#95a5a6"))
+        save_btn.clicked.connect(self.save_manual_data)
+        save_btn.setMinimumHeight(50)
+        button_layout.addWidget(save_btn)
+
+        calc_chart_btn = QPushButton("📈 Calculate & Generate Chart")
+        calc_chart_btn.setStyleSheet(self.get_button_style("#27ae60"))
+        calc_chart_btn.clicked.connect(self.calculate_and_chart)
+        calc_chart_btn.setMinimumHeight(50)
+        button_layout.addWidget(calc_chart_btn)
+
+        entry_layout.addLayout(button_layout)
+        entry_widget.setLayout(entry_layout)
+
+        # Right side: Chart Display
+        chart_widget = QWidget()
+        chart_layout = QVBoxLayout()
+
+        chart_title = QLabel("📊 KPI Visualization")
+        chart_title.setStyleSheet("font-size: 14pt; font-weight: bold; color: #2c3e50; padding: 10px;")
+        chart_title.setAlignment(Qt.AlignCenter)
+        chart_layout.addWidget(chart_title)
+
+        self.chart_container = QWidget()
+        self.chart_container.setMinimumSize(400, 400)
+        self.chart_container.setStyleSheet("background-color: white; border: 2px solid #bdc3c7; border-radius: 8px;")
+        self.chart_container_layout = QVBoxLayout()
+        self.chart_container.setLayout(self.chart_container_layout)
+        chart_layout.addWidget(self.chart_container)
+
+        chart_widget.setLayout(chart_layout)
+
+        splitter.addWidget(entry_widget)
+        splitter.addWidget(chart_widget)
+        splitter.setSizes([400, 500])
+
+        layout.addWidget(splitter)
+        widget.setLayout(layout)
+        return widget
+
+    def create_overview_tab(self):
+        """Create KPI overview tab"""
+        widget = QWidget()
+        layout = QVBoxLayout()
+
+        # Summary cards
+        summary_layout = QHBoxLayout()
+
+        self.total_kpis_label = QLabel("Total KPIs\n0/17")
+        self.total_kpis_label.setStyleSheet(self.get_card_style("#3498db"))
+        summary_layout.addWidget(self.total_kpis_label)
+
+        self.passing_kpis_label = QLabel("✓ Passing\n0")
+        self.passing_kpis_label.setStyleSheet(self.get_card_style("#27ae60"))
+        summary_layout.addWidget(self.passing_kpis_label)
+
+        self.failing_kpis_label = QLabel("✗ Failing\n0")
+        self.failing_kpis_label.setStyleSheet(self.get_card_style("#e74c3c"))
+        summary_layout.addWidget(self.failing_kpis_label)
+
+        self.pending_kpis_label = QLabel("⏳ Pending\n17")
+        self.pending_kpis_label.setStyleSheet(self.get_card_style("#f39c12"))
+        summary_layout.addWidget(self.pending_kpis_label)
+
+        layout.addLayout(summary_layout)
+
+        # KPI Results Table
+        self.overview_table = QTableWidget()
+        self.overview_table.setColumnCount(7)
+        self.overview_table.setHorizontalHeaderLabels([
+            "Function", "KPI Name", "Value", "Target", "Status", "Date", "Notes"
+        ])
+        self.overview_table.horizontalHeader().setStretchLastSection(True)
+        self.overview_table.setAlternatingRowColors(True)
+        self.overview_table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.overview_table.setStyleSheet("""
+            QTableWidget {
+                gridline-color: #bdc3c7;
+                font-size: 10pt;
+            }
+            QHeaderView::section {
+                background-color: #34495e;
+                color: white;
+                padding: 8px;
+                font-weight: bold;
+                border: none;
+            }
+        """)
+
+        layout.addWidget(self.overview_table)
+
+        widget.setLayout(layout)
+        return widget
+
+    def create_export_tab(self):
+        """Create export tab"""
+        widget = QWidget()
+        layout = QVBoxLayout()
+
+        # Export options
+        export_group = QGroupBox("📤 Export KPI Reports")
+        export_group.setStyleSheet("""
+            QGroupBox {
+                font-size: 12pt;
+                font-weight: bold;
+                border: 2px solid #3498db;
+                border-radius: 8px;
+                margin-top: 10px;
+                padding: 15px;
+            }
+        """)
+        export_layout = QVBoxLayout()
+
+        info_label = QLabel("Export your KPI data to professional PDF or Excel reports for presentation and archival.")
+        info_label.setWordWrap(True)
+        info_label.setStyleSheet("background-color: #e8f4f8; padding: 10px; border-radius: 5px;")
+        export_layout.addWidget(info_label)
+
+        export_layout.addSpacing(20)
+
+        # Export buttons
+        export_btn_layout = QHBoxLayout()
+
+        pdf_btn = QPushButton("📄 Export to PDF")
+        pdf_btn.clicked.connect(self.export_to_pdf)
+        pdf_btn.setStyleSheet(self.get_button_style("#e74c3c"))
+        pdf_btn.setMinimumHeight(80)
+        pdf_btn.setMinimumWidth(200)
+        export_btn_layout.addWidget(pdf_btn)
+
+        excel_btn = QPushButton("📊 Export to Excel")
+        excel_btn.clicked.connect(self.export_to_excel)
+        excel_btn.setStyleSheet(self.get_button_style("#27ae60"))
+        excel_btn.setMinimumHeight(80)
+        excel_btn.setMinimumWidth(200)
+        export_btn_layout.addWidget(excel_btn)
+
+        export_layout.addLayout(export_btn_layout)
+        export_group.setLayout(export_layout)
+        layout.addWidget(export_group)
+
+        layout.addStretch()
+
+        widget.setLayout(layout)
+        return widget
+
+    def get_card_style(self, color):
+        """Get style for summary cards"""
+        return f"""
+            QLabel {{
+                background-color: {color};
+                color: white;
+                padding: 20px;
+                border-radius: 10px;
+                font-size: 16pt;
+                font-weight: bold;
+                text-align: center;
+            }}
+        """
 
     def populate_periods(self):
         """Populate period dropdown with last 12 months"""
@@ -105,191 +448,17 @@ class KPIDashboard(QWidget):
         """Handle period selection change"""
         self.current_period = self.period_combo.currentData()
         self.refresh_dashboard()
-
-    def create_overview_tab(self):
-        """Create KPI overview tab"""
-        widget = QWidget()
-        layout = QVBoxLayout()
-
-        # Summary cards
-        summary_layout = QHBoxLayout()
-
-        self.total_kpis_label = QLabel("Total KPIs: 0")
-        self.total_kpis_label.setStyleSheet(self.get_card_style("#3498db"))
-        summary_layout.addWidget(self.total_kpis_label)
-
-        self.passing_kpis_label = QLabel("Passing: 0")
-        self.passing_kpis_label.setStyleSheet(self.get_card_style("#27ae60"))
-        summary_layout.addWidget(self.passing_kpis_label)
-
-        self.failing_kpis_label = QLabel("Failing: 0")
-        self.failing_kpis_label.setStyleSheet(self.get_card_style("#e74c3c"))
-        summary_layout.addWidget(self.failing_kpis_label)
-
-        self.pending_kpis_label = QLabel("Pending Data: 0")
-        self.pending_kpis_label.setStyleSheet(self.get_card_style("#f39c12"))
-        summary_layout.addWidget(self.pending_kpis_label)
-
-        layout.addLayout(summary_layout)
-
-        # KPI Results Table
-        self.overview_table = QTableWidget()
-        self.overview_table.setColumnCount(7)
-        self.overview_table.setHorizontalHeaderLabels([
-            "Function", "KPI Name", "Value", "Target", "Status", "Calculated Date", "Notes"
-        ])
-        self.overview_table.horizontalHeader().setStretchLastSection(True)
-        self.overview_table.setAlternatingRowColors(True)
-        self.overview_table.setSelectionBehavior(QTableWidget.SelectRows)
-
-        layout.addWidget(self.overview_table)
-
-        widget.setLayout(layout)
-        return widget
-
-    def create_input_tab(self):
-        """Create manual data input tab"""
-        widget = QWidget()
-        layout = QVBoxLayout()
-
-        # Instructions
-        instructions = QLabel(
-            "Select a KPI below to enter manual data. Some KPIs are calculated automatically from the database."
-        )
-        instructions.setWordWrap(True)
-        instructions.setStyleSheet("background-color: #e8f4f8; padding: 10px; border-radius: 5px;")
-        layout.addWidget(instructions)
-
-        # KPI Selection
-        selection_layout = QHBoxLayout()
-        selection_layout.addWidget(QLabel("Select KPI:"))
-
-        self.kpi_selector = QComboBox()
-        self.populate_kpi_selector()
-        self.kpi_selector.currentTextChanged.connect(self.on_kpi_selected)
-        selection_layout.addWidget(self.kpi_selector, 1)
-
-        layout.addLayout(selection_layout)
-
-        # Scroll area for input fields
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setMinimumHeight(400)
-
-        self.input_form_widget = QWidget()
-        self.input_form_layout = QVBoxLayout()
-        self.input_form_widget.setLayout(self.input_form_layout)
-        scroll.setWidget(self.input_form_widget)
-
-        layout.addWidget(scroll)
-
-        # Buttons
-        button_layout = QHBoxLayout()
-        button_layout.addStretch()
-
-        save_btn = QPushButton("💾 Save Data")
-        save_btn.clicked.connect(self.save_manual_data)
-        save_btn.setStyleSheet("background-color: #27ae60; color: white; font-weight: bold; padding: 10px 20px;")
-        button_layout.addWidget(save_btn)
-
-        calc_btn = QPushButton("🧮 Calculate KPI")
-        calc_btn.clicked.connect(self.calculate_selected_kpi)
-        calc_btn.setStyleSheet("background-color: #3498db; color: white; font-weight: bold; padding: 10px 20px;")
-        button_layout.addWidget(calc_btn)
-
-        layout.addLayout(button_layout)
-
-        widget.setLayout(layout)
-        return widget
-
-    def create_export_tab(self):
-        """Create export tab"""
-        widget = QWidget()
-        layout = QVBoxLayout()
-
-        # Export options
-        layout.addWidget(QLabel("<h3>Export KPI Reports</h3>"))
-
-        info_label = QLabel(
-            "Export your KPI data to professional PDF or Excel reports for presentation and archival."
-        )
-        info_label.setWordWrap(True)
-        info_label.setStyleSheet("background-color: #e8f4f8; padding: 10px; border-radius: 5px;")
-        layout.addWidget(info_label)
-
-        layout.addSpacing(20)
-
-        # Period selection for export
-        period_layout = QHBoxLayout()
-        period_layout.addWidget(QLabel("Export Period:"))
-        self.export_period_combo = QComboBox()
-        self.export_period_combo.addItem("Current Period", self.current_period)
-        self.export_period_combo.addItem("Last 3 Months", "3months")
-        self.export_period_combo.addItem("Last 6 Months", "6months")
-        self.export_period_combo.addItem("Last 12 Months", "12months")
-        period_layout.addWidget(self.export_period_combo)
-        period_layout.addStretch()
-        layout.addLayout(period_layout)
-
-        layout.addSpacing(20)
-
-        # Export buttons
-        export_btn_layout = QHBoxLayout()
-
-        pdf_btn = QPushButton("📄 Export to PDF")
-        pdf_btn.setIcon(self.style().standardIcon(QStyle.SP_FileIcon))
-        pdf_btn.clicked.connect(self.export_to_pdf)
-        pdf_btn.setStyleSheet("background-color: #e74c3c; color: white; font-weight: bold; padding: 15px; font-size: 12pt;")
-        pdf_btn.setMinimumHeight(60)
-        export_btn_layout.addWidget(pdf_btn)
-
-        excel_btn = QPushButton("📊 Export to Excel")
-        excel_btn.setIcon(self.style().standardIcon(QStyle.SP_FileDialogDetailedView))
-        excel_btn.clicked.connect(self.export_to_excel)
-        excel_btn.setStyleSheet("background-color: #27ae60; color: white; font-weight: bold; padding: 15px; font-size: 12pt;")
-        excel_btn.setMinimumHeight(60)
-        export_btn_layout.addWidget(excel_btn)
-
-        layout.addLayout(export_btn_layout)
-
-        # Export history
-        layout.addSpacing(30)
-        layout.addWidget(QLabel("<h3>Export History</h3>"))
-
-        self.export_history_table = QTableWidget()
-        self.export_history_table.setColumnCount(5)
-        self.export_history_table.setHorizontalHeaderLabels([
-            "Export Date", "Period", "Type", "Exported By", "File Name"
-        ])
-        self.export_history_table.horizontalHeader().setStretchLastSection(True)
-        self.export_history_table.setAlternatingRowColors(True)
-        layout.addWidget(self.export_history_table)
-
-        layout.addStretch()
-
-        widget.setLayout(layout)
-        return widget
-
-    def get_card_style(self, color):
-        """Get style for summary cards"""
-        return f"""
-            QLabel {{
-                background-color: {color};
-                color: white;
-                padding: 20px;
-                border-radius: 10px;
-                font-size: 14pt;
-                font-weight: bold;
-            }}
-        """
+        # Reload current KPI data if one is selected
+        if self.kpi_selector.currentData():
+            self.on_kpi_selected(self.kpi_selector.currentText())
 
     def populate_kpi_selector(self):
-        """Populate KPI selector with manual KPIs"""
+        """Populate KPI selector with ALL 17 KPIs"""
         self.kpi_selector.clear()
-        self.kpi_selector.addItem("-- Select KPI --", None)
+        self.kpi_selector.addItem("-- Select a KPI --", None)
 
-        manual_kpis = self.kpi_manager.get_kpis_needing_manual_data()
-        for kpi_name in manual_kpis:
+        all_kpis = self.kpi_manager.get_kpis_needing_manual_data()
+        for kpi_name in all_kpis:
             self.kpi_selector.addItem(kpi_name, kpi_name)
 
     def on_kpi_selected(self, text):
@@ -297,6 +466,12 @@ class KPIDashboard(QWidget):
         # Clear previous form
         while self.input_form_layout.count():
             child = self.input_form_layout.takeAt(0)
+            if child.widget():
+                child.widget().deleteLater()
+
+        # Clear KPI info
+        while self.kpi_info_layout.count():
+            child = self.kpi_info_layout.takeAt(0)
             if child.widget():
                 child.widget().deleteLater()
 
@@ -312,22 +487,37 @@ class KPIDashboard(QWidget):
 
         if kpi_def:
             # Show KPI info
-            info_group = QGroupBox(f"KPI: {kpi_name}")
-            info_layout = QVBoxLayout()
-            info_layout.addWidget(QLabel(f"<b>Description:</b> {kpi_def['description']}"))
-            info_layout.addWidget(QLabel(f"<b>Formula:</b> {kpi_def['formula']}"))
-            info_layout.addWidget(QLabel(f"<b>Target:</b> {kpi_def['acceptance_criteria']}"))
-            info_layout.addWidget(QLabel(f"<b>Frequency:</b> {kpi_def['frequency']}"))
-            info_group.setLayout(info_layout)
-            self.input_form_layout.addWidget(info_group)
+            info_html = f"""
+            <p><b>Description:</b> {kpi_def['description']}</p>
+            <p><b>Formula:</b> {kpi_def['formula']}</p>
+            <p><b>Target:</b> <span style='color: #27ae60; font-weight: bold;'>{kpi_def['acceptance_criteria']}</span></p>
+            <p><b>Frequency:</b> {kpi_def['frequency']}</p>
+            """
+            info_label = QLabel(info_html)
+            info_label.setWordWrap(True)
+            info_label.setStyleSheet("padding: 5px; font-size: 10pt;")
+            self.kpi_info_layout.addWidget(info_label)
 
         # Load existing data if any
         existing_data = self.kpi_manager.get_manual_data(kpi_name, self.current_period)
         existing_dict = {row['data_field']: row['data_value'] or row['data_text'] for row in existing_data}
 
         # Create input fields
-        inputs_group = QGroupBox("Data Input")
+        inputs_group = QGroupBox(f"📊 Data Input for: {kpi_name}")
+        inputs_group.setStyleSheet("""
+            QGroupBox {
+                font-size: 11pt;
+                font-weight: bold;
+                border: 2px solid #3498db;
+                border-radius: 8px;
+                margin-top: 10px;
+                padding: 15px;
+                background-color: #f8f9fa;
+            }
+        """)
         inputs_layout = QFormLayout()
+        inputs_layout.setSpacing(15)
+        inputs_layout.setLabelAlignment(Qt.AlignRight)
 
         self.input_fields = {}
 
@@ -336,27 +526,52 @@ class KPIDashboard(QWidget):
             label = field_info['label']
             field_type = field_info['type']
 
+            label_widget = QLabel(label + ":")
+            label_widget.setStyleSheet("font-weight: bold; color: #2c3e50;")
+
             if field_type == 'number':
                 input_widget = QDoubleSpinBox()
                 input_widget.setRange(0, 999999)
                 input_widget.setDecimals(2)
-                input_widget.setMinimumWidth(150)
+                input_widget.setMinimumWidth(200)
+                input_widget.setMinimumHeight(35)
+                input_widget.setStyleSheet("""
+                    QDoubleSpinBox {
+                        padding: 5px;
+                        border: 2px solid #bdc3c7;
+                        border-radius: 5px;
+                        font-size: 11pt;
+                    }
+                    QDoubleSpinBox:focus {
+                        border: 2px solid #3498db;
+                    }
+                """)
                 # Load existing value
                 if field_name in existing_dict and existing_dict[field_name] is not None:
                     input_widget.setValue(float(existing_dict[field_name]))
             else:  # text
                 input_widget = QTextEdit()
                 input_widget.setMaximumHeight(100)
+                input_widget.setStyleSheet("""
+                    QTextEdit {
+                        padding: 5px;
+                        border: 2px solid #bdc3c7;
+                        border-radius: 5px;
+                        font-size: 10pt;
+                    }
+                    QTextEdit:focus {
+                        border: 2px solid #3498db;
+                    }
+                """)
                 # Load existing value
                 if field_name in existing_dict:
                     input_widget.setText(str(existing_dict[field_name]))
 
             self.input_fields[field_name] = input_widget
-            inputs_layout.addRow(label + ":", input_widget)
+            inputs_layout.addRow(label_widget, input_widget)
 
         inputs_group.setLayout(inputs_layout)
         self.input_form_layout.addWidget(inputs_group)
-
         self.input_form_layout.addStretch()
 
     def save_manual_data(self):
@@ -389,26 +604,31 @@ class KPIDashboard(QWidget):
                         entered_by=self.current_user
                     )
 
-            QMessageBox.information(self, "Success", f"Manual data saved for {kpi_name}")
+            QMessageBox.information(self, "✓ Success", f"Data saved successfully for {kpi_name}")
 
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to save data: {str(e)}\n\n{traceback.format_exc()}")
 
-    def calculate_selected_kpi(self):
-        """Calculate the selected KPI from manual data"""
+    def calculate_and_chart(self):
+        """Calculate the selected KPI and generate visualization"""
         kpi_name = self.kpi_selector.currentData()
         if not kpi_name:
             QMessageBox.warning(self, "No KPI Selected", "Please select a KPI first.")
             return
 
         try:
+            # Calculate KPI
             result = self.kpi_manager.calculate_manual_kpi(kpi_name, self.current_period, self.current_user)
 
             if 'error' in result:
                 QMessageBox.warning(self, "Cannot Calculate", result['error'])
                 return
 
-            msg = f"KPI Calculated: {kpi_name}\n\n"
+            # Generate chart
+            self.generate_chart(kpi_name, result)
+
+            # Show success message
+            msg = f"✓ KPI Calculated: {kpi_name}\n\n"
             if result.get('value') is not None:
                 msg += f"Value: {result['value']:.2f}\n"
             if result.get('text'):
@@ -423,23 +643,166 @@ class KPIDashboard(QWidget):
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to calculate KPI: {str(e)}\n\n{traceback.format_exc()}")
 
-    def calculate_auto_kpis(self):
-        """Calculate all automatic KPIs"""
-        try:
-            results = self.kpi_manager.calculate_all_auto_kpis(self.current_period, self.current_user)
+    def generate_chart(self, kpi_name, result):
+        """Generate appropriate chart for the KPI"""
+        # Clear previous chart
+        if self.chart_canvas:
+            self.chart_container_layout.removeWidget(self.chart_canvas)
+            self.chart_canvas.deleteLater()
+            self.chart_canvas = None
 
-            msg = "Auto KPI Calculation Complete:\n\n"
-            for kpi_key, result in results.items():
-                if 'error' in result:
-                    msg += f"✗ {kpi_key}: {result['error']}\n"
-                else:
-                    msg += f"✓ {kpi_key}: Success\n"
+        # Create figure
+        fig = Figure(figsize=(6, 5), dpi=100)
+        fig.patch.set_facecolor('white')
 
-            QMessageBox.information(self, "Calculation Complete", msg)
-            self.refresh_dashboard()
+        # Determine chart type based on KPI
+        if kpi_name in ['FR1', 'Near Miss', 'Non Conformances raised', 'WO opened vs WO closed',
+                        'WO Backlog', 'WO age profile']:
+            # Bar chart for count-based KPIs
+            self.create_bar_chart(fig, kpi_name, result)
+        elif kpi_name in ['Preventive Maintenance Adherence', 'TTR (Time to Repair) Adherence',
+                          'Technical Availability Adherence', 'Purchaser satisfaction',
+                          'Purchaser Satisfaction Survey', 'Purchaser Monthly process Confirmation',
+                          'Non Conformances closed']:
+            # Pie/Donut chart for percentage KPIs
+            self.create_percentage_chart(fig, kpi_name, result)
+        elif kpi_name == 'Top Breakdown':
+            # Text display for narrative KPIs
+            self.create_text_display(fig, kpi_name, result)
+        else:
+            # Default: gauge/indicator chart
+            self.create_indicator_chart(fig, kpi_name, result)
 
-        except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to calculate auto KPIs: {str(e)}\n\n{traceback.format_exc()}")
+        # Add canvas to layout
+        self.chart_canvas = FigureCanvas(fig)
+        self.chart_container_layout.addWidget(self.chart_canvas)
+        self.chart_canvas.draw()
+
+    def create_bar_chart(self, fig, kpi_name, result):
+        """Create bar chart for count-based KPIs"""
+        ax = fig.add_subplot(111)
+
+        # Get data from result text
+        value = result.get('value', 0)
+        text = result.get('text', '')
+        meets_criteria = result.get('meets_criteria')
+
+        if kpi_name == 'WO opened vs WO closed':
+            # Parse the text to get opened, closed, currently open
+            import re
+            opened = int(re.search(r'Opened: (\d+)', text).group(1)) if 'Opened:' in text else 0
+            closed = int(re.search(r'Closed: (\d+)', text).group(1)) if 'Closed:' in text else 0
+            currently_open = int(re.search(r'Currently Open: (\d+)', text).group(1)) if 'Currently Open:' in text else 0
+
+            categories = ['Opened', 'Closed', 'Currently Open']
+            values = [opened, closed, currently_open]
+            colors = ['#3498db', '#27ae60', '#e74c3c' if currently_open > 40 else '#f39c12']
+
+            bars = ax.bar(categories, values, color=colors, edgecolor='black', linewidth=1.5)
+            ax.set_ylabel('Count', fontweight='bold')
+            ax.set_title(f'{kpi_name}\n{self.current_period}', fontweight='bold', fontsize=12)
+
+            # Add value labels on bars
+            for bar in bars:
+                height = bar.get_height()
+                ax.text(bar.get_x() + bar.get_width()/2., height,
+                       f'{int(height)}',
+                       ha='center', va='bottom', fontweight='bold')
+        else:
+            # Simple single bar chart
+            color = '#27ae60' if meets_criteria else '#e74c3c'
+            bar = ax.bar([kpi_name.split()[0]], [value], color=color, edgecolor='black', linewidth=1.5, width=0.5)
+            ax.set_ylabel('Value', fontweight='bold')
+            ax.set_title(f'{kpi_name}\n{self.current_period}', fontweight='bold', fontsize=12)
+
+            # Add value label
+            height = bar[0].get_height()
+            ax.text(bar[0].get_x() + bar[0].get_width()/2., height,
+                   f'{value:.1f}',
+                   ha='center', va='bottom', fontweight='bold')
+
+        ax.grid(axis='y', alpha=0.3, linestyle='--')
+        fig.tight_layout()
+
+    def create_percentage_chart(self, fig, kpi_name, result):
+        """Create donut chart for percentage KPIs"""
+        ax = fig.add_subplot(111)
+
+        value = result.get('value', 0)
+        meets_criteria = result.get('meets_criteria')
+
+        # Create donut chart
+        remaining = max(0, 100 - value)
+        values = [value, remaining]
+        colors = ['#27ae60' if meets_criteria else '#e74c3c', '#ecf0f1']
+        labels = [f'{value:.1f}%', f'{remaining:.1f}%']
+
+        wedges, texts, autotexts = ax.pie(values, labels=labels, colors=colors, autopct='',
+                                            startangle=90, counterclock=False,
+                                            wedgeprops=dict(width=0.5, edgecolor='white', linewidth=2))
+
+        # Add center text
+        ax.text(0, 0, f'{value:.1f}%', ha='center', va='center', fontsize=20, fontweight='bold')
+
+        status = "✓ PASS" if meets_criteria else "✗ FAIL" if meets_criteria is not None else "N/A"
+        ax.set_title(f'{kpi_name}\n{self.current_period}\nStatus: {status}',
+                    fontweight='bold', fontsize=11)
+
+        fig.tight_layout()
+
+    def create_indicator_chart(self, fig, kpi_name, result):
+        """Create indicator/gauge style chart"""
+        ax = fig.add_subplot(111)
+        ax.axis('off')
+
+        value = result.get('value', 0)
+        text = result.get('text', 'N/A')
+        meets_criteria = result.get('meets_criteria')
+
+        # Large value display
+        color = '#27ae60' if meets_criteria else '#e74c3c' if meets_criteria is not None else '#95a5a6'
+
+        ax.text(0.5, 0.6, f'{value:.2f}' if value is not None else 'N/A',
+               ha='center', va='center', fontsize=36, fontweight='bold',
+               color=color, transform=ax.transAxes)
+
+        ax.text(0.5, 0.4, text,
+               ha='center', va='center', fontsize=10,
+               transform=ax.transAxes, wrap=True)
+
+        status = "✓ PASS" if meets_criteria else "✗ FAIL" if meets_criteria is not None else "N/A"
+        status_color = '#27ae60' if meets_criteria else '#e74c3c' if meets_criteria is not None else '#95a5a6'
+
+        ax.text(0.5, 0.25, f'Status: {status}',
+               ha='center', va='center', fontsize=14, fontweight='bold',
+               color=status_color, transform=ax.transAxes)
+
+        ax.text(0.5, 0.85, f'{kpi_name}\n{self.current_period}',
+               ha='center', va='center', fontsize=11, fontweight='bold',
+               transform=ax.transAxes)
+
+        fig.tight_layout()
+
+    def create_text_display(self, fig, kpi_name, result):
+        """Create text display for narrative KPIs"""
+        ax = fig.add_subplot(111)
+        ax.axis('off')
+
+        text = result.get('text', 'No data entered')
+
+        ax.text(0.5, 0.7, kpi_name,
+               ha='center', va='center', fontsize=14, fontweight='bold',
+               transform=ax.transAxes)
+
+        ax.text(0.5, 0.4, text,
+               ha='center', va='center', fontsize=10,
+               transform=ax.transAxes, wrap=True)
+
+        ax.text(0.5, 0.1, self.current_period,
+               ha='center', va='center', fontsize=10, style='italic',
+               transform=ax.transAxes)
+
+        fig.tight_layout()
 
     def refresh_dashboard(self):
         """Refresh the overview dashboard"""
@@ -450,12 +813,12 @@ class KPIDashboard(QWidget):
             total = len(results)
             passing = sum(1 for r in results if r.get('meets_criteria') is True)
             failing = sum(1 for r in results if r.get('meets_criteria') is False)
-            pending = 17 - total  # 17 total KPIs
+            pending = 17 - total
 
-            self.total_kpis_label.setText(f"Total KPIs: {total}")
-            self.passing_kpis_label.setText(f"✓ Passing: {passing}")
-            self.failing_kpis_label.setText(f"✗ Failing: {failing}")
-            self.pending_kpis_label.setText(f"⏳ Pending Data: {pending}")
+            self.total_kpis_label.setText(f"Total KPIs\n{total}/17")
+            self.passing_kpis_label.setText(f"✓ Passing\n{passing}")
+            self.failing_kpis_label.setText(f"✗ Failing\n{failing}")
+            self.pending_kpis_label.setText(f"⏳ Pending\n{pending}")
 
             # Update table
             self.overview_table.setRowCount(len(results))
@@ -531,7 +894,7 @@ class KPIDashboard(QWidget):
                 spaceAfter=30,
                 alignment=TA_CENTER
             )
-            elements.append(Paragraph("KPI Performance Report", title_style))
+            elements.append(Paragraph("KPI Performance Report 2025", title_style))
 
             # Period info
             period_text = f"Measurement Period: {self.current_period}"
@@ -642,7 +1005,7 @@ class KPIDashboard(QWidget):
 
             # Title
             ws.merge_cells('A1:G1')
-            ws['A1'] = 'KPI Performance Report'
+            ws['A1'] = 'KPI Performance Report 2025'
             ws['A1'].font = Font(bold=True, size=16)
             ws['A1'].alignment = Alignment(horizontal='center')
 

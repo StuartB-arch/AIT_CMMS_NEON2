@@ -462,7 +462,7 @@ class KPIManager:
         return results
 
     def get_kpis_needing_manual_data(self):
-        """Get list of KPIs that require manual data input"""
+        """Get list of all 17 KPIs that require manual data input"""
         return [
             'FR1',
             'Near Miss',
@@ -470,12 +470,17 @@ class KPIManager:
             'MTBF Mean Time Between Failure',
             'Technical Availability Adherence',
             'MRT (Mean Response Time)',
+            'WO opened vs WO closed',
+            'WO Backlog',
+            'WO age profile',
+            'Preventive Maintenance Adherence',
             'Top Breakdown',
             'Purchaser Monthly process Confirmation',
             'Purchaser satisfaction',
             'Non Conformances raised',
             'Non Conformances closed',
-            'Mean Time to Deliver a Quote'
+            'Mean Time to Deliver a Quote',
+            'Purchaser Satisfaction Survey'
         ]
 
     def get_required_fields_for_kpi(self, kpi_name):
@@ -508,6 +513,24 @@ class KPIManager:
                 {'field': 'total_response_time_minutes', 'label': 'Total Response Time (minutes)', 'type': 'number'},
                 {'field': 'wo_count', 'label': 'Number of Work Orders', 'type': 'number'}
             ],
+            'WO opened vs WO closed': [
+                {'field': 'wo_opened', 'label': 'Number of Work Orders Opened', 'type': 'number'},
+                {'field': 'wo_closed', 'label': 'Number of Work Orders Closed', 'type': 'number'},
+                {'field': 'wo_currently_open', 'label': 'Number of Work Orders Currently Open', 'type': 'number'}
+            ],
+            'WO Backlog': [
+                {'field': 'wo_raised_this_month', 'label': 'Work Orders Raised This Month', 'type': 'number'},
+                {'field': 'wo_open', 'label': 'Work Orders Still Open', 'type': 'number'}
+            ],
+            'WO age profile': [
+                {'field': 'wo_over_60_days', 'label': 'Work Orders Over 60 Days Old', 'type': 'number'},
+                {'field': 'total_open_wo', 'label': 'Total Open Work Orders', 'type': 'number'},
+                {'field': 'avg_age_days', 'label': 'Average Age of Open WOs (days)', 'type': 'number'}
+            ],
+            'Preventive Maintenance Adherence': [
+                {'field': 'pm_scheduled', 'label': 'PM Work Orders Scheduled', 'type': 'number'},
+                {'field': 'pm_completed', 'label': 'PM Work Orders Completed', 'type': 'number'}
+            ],
             'Non Conformances raised': [
                 {'field': 'nc_count', 'label': 'Number of Non-Conformances Raised', 'type': 'number'}
             ],
@@ -520,7 +543,10 @@ class KPIManager:
                 {'field': 'quote_count', 'label': 'Number of Quotes Requested', 'type': 'number'}
             ],
             'Purchaser satisfaction': [
-                {'field': 'satisfaction_score', 'label': 'Satisfaction Score (0-100)', 'type': 'number'}
+                {'field': 'satisfaction_score', 'label': 'Satisfaction Score (%)', 'type': 'number'}
+            ],
+            'Purchaser Satisfaction Survey': [
+                {'field': 'survey_score', 'label': 'Yearly Satisfaction Survey Score (%)', 'type': 'number'}
             ],
             'Top Breakdown': [
                 {'field': 'breakdown_analysis', 'label': 'Breakdown Analysis (Pareto)', 'type': 'text'}
@@ -669,6 +695,52 @@ class KPIManager:
             elif kpi_name == 'Top Breakdown':
                 calculated_text = data_dict.get('breakdown_analysis') or 'N/A'
                 result = None
+
+            elif kpi_name == 'WO opened vs WO closed':
+                opened = float(data_dict.get('wo_opened') or 0)
+                closed = float(data_dict.get('wo_closed') or 0)
+                currently_open = float(data_dict.get('wo_currently_open') or 0)
+                result = currently_open
+                meets_criteria = currently_open <= 40
+                calculated_text = f"Opened: {int(opened)}, Closed: {int(closed)}, Currently Open: {int(currently_open)}"
+
+            elif kpi_name == 'WO Backlog':
+                raised = float(data_dict.get('wo_raised_this_month') or 0)
+                open_wo = float(data_dict.get('wo_open') or 0)
+                if raised > 0:
+                    backlog_pct = (open_wo / raised) * 100
+                    result = open_wo
+                    meets_criteria = backlog_pct < 10
+                    calculated_text = f"{int(open_wo)} open ({backlog_pct:.1f}% of {int(raised)} raised)"
+                else:
+                    result = open_wo
+                    meets_criteria = open_wo == 0
+                    calculated_text = f"{int(open_wo)} open (no WOs raised this month)"
+
+            elif kpi_name == 'WO age profile':
+                over_60 = float(data_dict.get('wo_over_60_days') or 0)
+                total_open = float(data_dict.get('total_open_wo') or 0)
+                avg_age = float(data_dict.get('avg_age_days') or 0)
+                result = over_60
+                meets_criteria = over_60 == 0
+                calculated_text = f"{int(over_60)} WOs over 60 days old (avg age: {avg_age:.1f} days)"
+
+            elif kpi_name == 'Preventive Maintenance Adherence':
+                scheduled = float(data_dict.get('pm_scheduled') or 0)
+                completed = float(data_dict.get('pm_completed') or 0)
+                if scheduled > 0:
+                    result = (completed / scheduled) * 100
+                    meets_criteria = result >= 95
+                    calculated_text = f"{int(completed)}/{int(scheduled)} completed ({result:.1f}%)"
+                else:
+                    result = 0
+                    meets_criteria = None
+                    calculated_text = "No PM scheduled"
+
+            elif kpi_name == 'Purchaser Satisfaction Survey':
+                result = float(data_dict.get('survey_score') or 0)
+                meets_criteria = result >= 90
+                calculated_text = f"{result}% satisfaction score"
 
             # Save the result
             if result is not None or calculated_text:
