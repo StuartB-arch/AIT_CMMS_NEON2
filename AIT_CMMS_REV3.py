@@ -10,6 +10,7 @@ from database_utils import db_pool, UserManager, AuditLogger, OptimisticConcurre
 from kpi_database_migration import migrate_kpi_database
 from kpi_manager import KPIManager
 from user_management_ui import UserManagementDialog
+from password_change_ui import show_password_change_dialog
 import shutil
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
@@ -7913,6 +7914,17 @@ class AITCMMSSystem:
         style = ttk.Style()
         style.theme_use('clam')
 
+        # Create menu bar (available to all users)
+        menubar = tk.Menu(self.root)
+        self.root.config(menu=menubar)
+
+        # Account menu
+        account_menu = tk.Menu(menubar, tearoff=0)
+        menubar.add_cascade(label="Account", menu=account_menu)
+        account_menu.add_command(label="Change Password", command=self.open_change_password)
+        account_menu.add_separator()
+        account_menu.add_command(label="Logout", command=self.logout)
+
         # Toolbar frame at the top (for Manager actions)
         if self.current_user_role == 'Manager':
             toolbar_frame = ttk.Frame(self.root, relief='raised', borderwidth=1)
@@ -8094,6 +8106,50 @@ class AITCMMSSystem:
 
         except Exception as e:
             messagebox.showerror("Error", f"Failed to open user management: {e}")
+
+    def open_change_password(self):
+        """Open password change dialog (available to all users)"""
+        try:
+            # Get the username from the user_name attribute
+            # user_name contains the full name, but we need the username
+            # We'll need to query the database to get the username
+            with db_pool.get_cursor(commit=False) as cursor:
+                cursor.execute(
+                    """
+                    SELECT username FROM users
+                    WHERE id = %s
+                    """,
+                    (self.user_id,)
+                )
+                result = cursor.fetchone()
+                if result:
+                    username = result['username'] if isinstance(result, dict) else result[0]
+                    show_password_change_dialog(self.root, self.user_name, username)
+                else:
+                    messagebox.showerror("Error", "Could not retrieve user information")
+
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to open password change dialog: {e}")
+            print(f"Password change dialog error: {e}")
+
+    def logout(self):
+        """Logout current user and show login dialog"""
+        result = messagebox.askyesno("Logout",
+                                     f"Logout {self.user_name}?\n\n"
+                                     "This will close the application.\n"
+                                     "You'll need to login again to continue.")
+        if result:
+            try:
+                # End the current session
+                if self.session_id:
+                    with db_pool.get_cursor(commit=True) as cursor:
+                        UserManager.end_session(cursor, self.session_id)
+                        print(f"Session {self.session_id} ended for user {self.user_name}")
+            except Exception as e:
+                print(f"Error ending session: {e}")
+            finally:
+                # Close the application
+                self.root.destroy()
 
     def switch_to_technician_view(self):
         """Switch to technician view for testing (Manager only)"""
