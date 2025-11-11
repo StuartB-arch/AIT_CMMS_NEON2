@@ -359,6 +359,67 @@ class UserManager:
         return user
 
     @staticmethod
+    def change_password(cursor, username, current_password, new_password):
+        """
+        Change user's password
+
+        Args:
+            cursor: Database cursor
+            username: Username
+            current_password: Current password (plain text) for verification
+            new_password: New password (plain text) to set
+
+        Returns:
+            tuple: (success: bool, message: str)
+        """
+        # First verify the current password
+        cursor.execute(
+            """
+            SELECT id, password_hash, is_active
+            FROM users
+            WHERE username = %s
+            """,
+            (username,)
+        )
+        user = cursor.fetchone()
+
+        if not user:
+            return False, "User not found"
+
+        # Convert to dict if needed
+        if isinstance(user, (tuple, list)):
+            user = {
+                'id': user[0],
+                'password_hash': user[1],
+                'is_active': user[2]
+            }
+        elif not isinstance(user, dict):
+            user = dict(user)
+
+        if not user['is_active']:
+            return False, "Account is not active"
+
+        # Verify current password
+        if not UserManager.verify_password(current_password, user['password_hash']):
+            return False, "Current password is incorrect"
+
+        # Hash new password
+        new_password_hash = UserManager.hash_password(new_password)
+
+        # Update password in database
+        cursor.execute(
+            """
+            UPDATE users
+            SET password_hash = %s,
+                updated_date = CURRENT_TIMESTAMP
+            WHERE id = %s
+            """,
+            (new_password_hash, user['id'])
+        )
+
+        return True, "Password changed successfully"
+
+    @staticmethod
     def create_session(cursor, user_id, username):
         """
         Create a new user session
