@@ -1,0 +1,323 @@
+================================================================================
+AIT CMMS - EASY INTEGRATION STEPS
+================================================================================
+
+Your application is working, but you need to ADD THE NEW FEATURES TO THE UI.
+Just importing the modules isn't enough - you need to add buttons/menus!
+
+Follow these 4 simple steps:
+
+================================================================================
+STEP 1: Add Imports (at the top of AIT_CMMS_REV3.py)
+================================================================================
+
+Find this line near the top (around line 10-15):
+    from kpi_manager import KPIManager
+
+RIGHT AFTER that line, add these imports:
+
+    # New modular features - added for enhanced functionality
+    from equipment_manager import EquipmentManager
+    from backup_manager import BackupManager
+    from equipment_history import show_equipment_history, EquipmentHistory
+    from kpi_auto_collector import KPIAutoCollector
+    from kpi_trend_analyzer import show_kpi_trends, KPITrendAnalyzer
+
+
+================================================================================
+STEP 2: Initialize Modules in __init__ method
+================================================================================
+
+Find this code in the __init__ method (around line 5208-5210):
+
+        # Initialize KPI system for managers
+        if self.current_user_role == 'Manager':
+            self.init_kpi_system()
+
+RIGHT AFTER those lines, add this:
+
+        # Initialize new modular features
+        try:
+            self.equipment_manager = EquipmentManager(self.conn)
+            self.kpi_collector = KPIAutoCollector(self.conn)
+            self.kpi_trend_analyzer = KPITrendAnalyzer(self.conn)
+            print("✓ New modules initialized successfully")
+        except Exception as e:
+            print(f"⚠ Warning: Could not initialize new modules: {e}")
+
+
+================================================================================
+STEP 3: Add Menu Items to create_gui method
+================================================================================
+
+Find the create_gui method (around line 7920-7928) where menus are created:
+
+        # Account menu
+        account_menu = tk.Menu(menubar, tearoff=0)
+        menubar.add_cascade(label="Account", menu=account_menu)
+        account_menu.add_command(label="Change Password", command=self.open_change_password)
+        account_menu.add_separator()
+        account_menu.add_command(label="Logout", command=self.logout)
+
+RIGHT AFTER those lines (after the Account menu), add these new menus:
+
+        # Tools menu - NEW MODULE FEATURES
+        tools_menu = tk.Menu(menubar, tearoff=0)
+        menubar.add_cascade(label="Tools", menu=tools_menu)
+
+        # Equipment tools
+        tools_menu.add_command(label="Equipment Manager",
+                              command=self.show_equipment_manager_dialog)
+        tools_menu.add_command(label="Equipment History",
+                              command=self.show_equipment_history_dialog)
+
+        # KPI tools (Manager only - we'll check in the methods)
+        tools_menu.add_separator()
+        tools_menu.add_command(label="Auto-Collect KPIs",
+                              command=self.auto_collect_kpis_dialog)
+        tools_menu.add_command(label="KPI Trends & Alerts",
+                              command=self.show_kpi_trends_dialog)
+
+        # Backup tools
+        tools_menu.add_separator()
+        tools_menu.add_command(label="Backup Manager",
+                              command=self.show_backup_manager_dialog)
+
+
+================================================================================
+STEP 4: Add Callback Methods (at the END of the class, before last line)
+================================================================================
+
+Scroll to the VERY END of your AITCMMSSystem class (around line 17000+)
+Just BEFORE the last line of the class, add these methods:
+
+    # ========================================================================
+    # NEW MODULAR FEATURES - Callback Methods
+    # ========================================================================
+
+    def show_equipment_manager_dialog(self):
+        """Show equipment manager statistics"""
+        try:
+            if not hasattr(self, 'equipment_manager'):
+                messagebox.showerror("Error", "Equipment manager not initialized")
+                return
+
+            # Create simple dialog showing stats
+            dialog = tk.Toplevel(self.root)
+            dialog.title("Equipment Manager")
+            dialog.geometry("700x500")
+            dialog.transient(self.root)
+
+            ttk.Label(dialog, text="Equipment Manager",
+                     font=('Arial', 14, 'bold')).pack(pady=10)
+
+            stats_text = tk.Text(dialog, wrap='word', font=('Courier', 10))
+            stats_text.pack(fill='both', expand=True, padx=10, pady=10)
+
+            # Get statistics
+            stats = self.equipment_manager.get_equipment_statistics()
+            attention = self.equipment_manager.get_equipment_requiring_attention()
+
+            report = f"""
+EQUIPMENT STATISTICS
+{'='*60}
+
+Total Equipment: {stats['total']}
+Active: {stats['active']}
+Run to Failure: {stats['run_to_failure']}
+Missing: {stats['missing']}
+
+With Monthly PM: {stats['monthly_pm']}
+With Annual PM: {stats['annual_pm']}
+
+{'='*60}
+EQUIPMENT REQUIRING ATTENTION
+{'='*60}
+
+Overdue Monthly PMs: {len(attention['overdue_monthly'])}
+"""
+            for eq in attention['overdue_monthly'][:10]:
+                report += f"  • {eq['bfm_no']}: {eq['description'][:40]} ({eq['days_overdue']} days overdue)\n"
+
+            report += f"\nOverdue Annual PMs: {len(attention['overdue_annual'])}\n"
+            for eq in attention['overdue_annual'][:10]:
+                report += f"  • {eq['bfm_no']}: {eq['description'][:40]} ({eq['days_overdue']} days overdue)\n"
+
+            stats_text.insert('1.0', report)
+            stats_text.config(state='disabled')
+
+            ttk.Button(dialog, text="Close", command=dialog.destroy).pack(pady=10)
+
+        except Exception as e:
+            messagebox.showerror("Error", f"Error opening equipment manager: {str(e)}")
+
+    def show_equipment_history_dialog(self):
+        """Show equipment history for selected or entered equipment"""
+        try:
+            if not hasattr(self, 'equipment_manager'):
+                messagebox.showerror("Error", "Equipment manager not initialized")
+                return
+
+            # Ask for BFM number
+            from tkinter import simpledialog
+            bfm_no = simpledialog.askstring(
+                "Equipment History",
+                "Enter Equipment BFM Number:",
+                parent=self.root
+            )
+
+            if bfm_no:
+                show_equipment_history(self.root, self.conn, str(bfm_no))
+
+        except Exception as e:
+            messagebox.showerror("Error", f"Error opening equipment history: {str(e)}")
+
+    def auto_collect_kpis_dialog(self):
+        """Auto-collect KPIs for current month"""
+        try:
+            if self.current_user_role != 'Manager':
+                messagebox.showerror("Access Denied",
+                    "Only managers can access KPI features")
+                return
+
+            if not hasattr(self, 'kpi_collector'):
+                messagebox.showerror("Error", "KPI collector not initialized")
+                return
+
+            current_period = datetime.now().strftime('%Y-%m')
+
+            if messagebox.askyesno("Auto-Collect KPIs",
+                f"Auto-collect KPIs for {current_period}?\n\n"
+                "This will calculate KPIs from existing maintenance data."):
+
+                try:
+                    result = self.kpi_collector.save_auto_collected_kpis(
+                        current_period,
+                        user_id=self.current_user
+                    )
+
+                    if result['success']:
+                        messagebox.showinfo("Success",
+                            f"Successfully auto-collected {result['saved_count']} KPIs!\n\n"
+                            f"Period: {result['period']}\n\n"
+                            "You can now view these in the KPI dashboard.")
+                    else:
+                        messagebox.showerror("Error",
+                            f"Error: {result.get('error', 'Unknown error')}")
+                except Exception as e:
+                    messagebox.showerror("Error", f"Error saving KPIs: {str(e)}")
+
+        except Exception as e:
+            messagebox.showerror("Error", f"Error: {str(e)}")
+
+    def show_kpi_trends_dialog(self):
+        """Show KPI trends and alerts window"""
+        try:
+            if self.current_user_role != 'Manager':
+                messagebox.showerror("Access Denied",
+                    "Only managers can access KPI features")
+                return
+
+            show_kpi_trends(self.root, self.conn)
+
+        except Exception as e:
+            messagebox.showerror("Error", f"Error opening KPI trends: {str(e)}")
+
+    def show_backup_manager_dialog(self):
+        """Show backup manager information"""
+        try:
+            dialog = tk.Toplevel(self.root)
+            dialog.title("Backup Manager")
+            dialog.geometry("800x400")
+            dialog.transient(self.root)
+
+            ttk.Label(dialog, text="Database Backup Manager",
+                     font=('Arial', 14, 'bold')).pack(pady=20)
+
+            info_text = tk.Text(dialog, wrap='word', height=15, width=90)
+            info_text.pack(padx=20, pady=10)
+
+            info_text.insert('1.0', """
+DATABASE BACKUP MANAGER
+================================================================================
+
+The backup manager provides automated database backups with:
+  • Scheduled backups (daily/weekly/monthly)
+  • Automatic retention and cleanup
+  • Backup verification
+  • Easy restore capabilities
+
+TO SET UP AUTOMATED BACKUPS:
+
+1. Initialize the BackupManager in your application:
+
+   from backup_manager import BackupManager
+
+   backup_mgr = BackupManager(db_config, backup_dir='./backups')
+   backup_mgr.update_config({
+       'enabled': True,
+       'schedule': 'daily',
+       'backup_time': '02:00',
+       'retention_days': 30
+   })
+   backup_mgr.start_automatic_backups()
+
+2. Backups will run automatically in the background
+
+3. View backups: backup_mgr.list_backups()
+
+4. Restore: backup_mgr.restore_backup(path, confirm=True)
+
+REQUIREMENTS:
+  • PostgreSQL command-line tools (pg_dump, pg_restore)
+  • Must be installed and accessible in PATH
+
+For detailed documentation, see:
+  • MODULAR_ARCHITECTURE_GUIDE.md
+  • backup_manager.py module
+
+""")
+            info_text.config(state='disabled')
+
+            ttk.Button(dialog, text="Close", command=dialog.destroy).pack(pady=10)
+
+        except Exception as e:
+            messagebox.showerror("Error", f"Error: {str(e)}")
+
+
+================================================================================
+DONE! Now restart your application and you should see:
+================================================================================
+
+1. A new "Tools" menu in the menu bar with:
+   ✓ Equipment Manager
+   ✓ Equipment History
+   ✓ Auto-Collect KPIs (Manager only)
+   ✓ KPI Trends & Alerts (Manager only)
+   ✓ Backup Manager
+
+2. Click any menu item to access the new features!
+
+3. Try them out:
+   - Equipment Manager shows statistics and overdue equipment
+   - Equipment History shows complete timeline for any equipment
+   - Auto-Collect KPIs calculates KPIs from your data automatically
+   - KPI Trends shows trends, alerts, and dashboard
+   - Backup Manager shows backup information
+
+================================================================================
+TROUBLESHOOTING
+================================================================================
+
+If you get errors:
+  1. Make sure ALL new .py files are in the same folder as AIT_CMMS_REV3.py
+  2. Check that imports are at the very top of the file
+  3. Make sure initialization is AFTER self.conn is set
+  4. Restart the application completely
+
+If a feature doesn't work:
+  - Check the Python console for error messages
+  - Make sure you're logged in as Manager for KPI features
+  - Verify your database connection is working
+
+================================================================================
