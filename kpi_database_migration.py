@@ -201,6 +201,8 @@ def migrate_kpi_database():
         print(f"\n✗ Migration failed: {e}")
         if conn:
             conn.rollback()
+            # Return connection to pool even on error
+            pool.return_connection(conn)
         return False
 
 

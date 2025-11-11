@@ -5183,7 +5183,7 @@ class AITCMMSSystem:
         # This must happen before login dialog because login needs database access
         print("Starting AIT CMMS Application...")
         try:
-            db_pool.initialize(self.DB_CONFIG, min_conn=2, max_conn=10)
+            db_pool.initialize(self.DB_CONFIG, min_conn=2, max_conn=20)
             print("Database connection pool initialized successfully")
         except Exception as e:
             messagebox.showerror("Database Error",
@@ -7465,7 +7465,8 @@ class AITCMMSSystem:
         try:
             if hasattr(self, 'conn') and self.conn:
                 try:
-                    self.conn.close()
+                    # Return old connection to pool instead of closing directly
+                    db_pool.return_connection(self.conn)
                 except:
                     pass
 
@@ -7897,10 +7898,11 @@ class AITCMMSSystem:
             print("CHECK: Performance indexes created successfully!")
 
             self.conn.commit()
+            cursor.close()
             print("CHECK: Database tables created successfully!")
             print("CHECK: Multi-user support tables initialized")
             print("=" * 60 + "\n")
-        
+
         except Exception as e:
             print(f"CHECK: ERROR connecting to database: {e}")
             if self.conn:
