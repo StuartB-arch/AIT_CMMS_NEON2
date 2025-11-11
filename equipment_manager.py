@@ -48,8 +48,8 @@ class EquipmentManager:
                 'bfm_no': row[0],
                 'description': row[1],
                 'location': row[2],
-                'has_monthly': row[3] == 'X' if row[3] else False,
-                'has_annual': row[4] == 'X' if row[4] else False,
+                'has_monthly': row[3] if row[3] is not None else False,
+                'has_annual': row[4] if row[4] is not None else False,
                 'last_monthly_pm': row[5],
                 'last_annual_pm': row[6],
                 'next_annual_pm': row[7],
@@ -129,8 +129,8 @@ class EquipmentManager:
                 'bfm_no': row[0],
                 'description': row[1],
                 'location': row[2],
-                'has_monthly': row[3] == 'X' if row[3] else False,
-                'has_annual': row[4] == 'X' if row[4] else False,
+                'has_monthly': row[3] if row[3] is not None else False,
+                'has_annual': row[4] if row[4] is not None else False,
                 'last_monthly_pm': row[5],
                 'last_annual_pm': row[6],
                 'status': row[7]
@@ -250,11 +250,11 @@ class EquipmentManager:
         stats['missing'] = cursor.fetchone()[0]
 
         # Equipment with Monthly PM
-        cursor.execute("SELECT COUNT(*) FROM equipment WHERE monthly_pm = 'X' AND status = 'Active'")
+        cursor.execute("SELECT COUNT(*) FROM equipment WHERE monthly_pm = TRUE AND status = 'Active'")
         stats['monthly_pm'] = cursor.fetchone()[0]
 
         # Equipment with Annual PM
-        cursor.execute("SELECT COUNT(*) FROM equipment WHERE annual_pm = 'X' AND status = 'Active'")
+        cursor.execute("SELECT COUNT(*) FROM equipment WHERE annual_pm = TRUE AND status = 'Active'")
         stats['annual_pm'] = cursor.fetchone()[0]
 
         return stats
@@ -280,7 +280,7 @@ class EquipmentManager:
             SELECT bfm_equipment_no, description, last_monthly_pm,
                    CURRENT_DATE - last_monthly_pm::date as days_overdue
             FROM equipment
-            WHERE monthly_pm = 'X'
+            WHERE monthly_pm = TRUE
             AND status = 'Active'
             AND last_monthly_pm IS NOT NULL
             AND CURRENT_DATE - last_monthly_pm::date > 35
@@ -301,7 +301,7 @@ class EquipmentManager:
             SELECT bfm_equipment_no, description, last_annual_pm,
                    CURRENT_DATE - last_annual_pm::date as days_overdue
             FROM equipment
-            WHERE annual_pm = 'X'
+            WHERE annual_pm = TRUE
             AND status = 'Active'
             AND last_annual_pm IS NOT NULL
             AND CURRENT_DATE - last_annual_pm::date > 370
@@ -337,11 +337,11 @@ class EquipmentManager:
             SELECT bfm_equipment_no, description, monthly_pm, annual_pm
             FROM equipment
             WHERE status = 'Active'
-            AND (monthly_pm = 'X' OR annual_pm = 'X')
+            AND (monthly_pm = TRUE OR annual_pm = TRUE)
             AND (
-                (monthly_pm = 'X' AND (last_monthly_pm IS NULL OR last_monthly_pm = ''))
+                (monthly_pm = TRUE AND (last_monthly_pm IS NULL OR last_monthly_pm = ''))
                 OR
-                (annual_pm = 'X' AND (last_annual_pm IS NULL OR last_annual_pm = ''))
+                (annual_pm = TRUE AND (last_annual_pm IS NULL OR last_annual_pm = ''))
             )
             ORDER BY bfm_equipment_no
             LIMIT 50
@@ -351,8 +351,8 @@ class EquipmentManager:
             results['no_pm_history'].append({
                 'bfm_no': row[0],
                 'description': row[1],
-                'has_monthly': row[2] == 'X',
-                'has_annual': row[3] == 'X'
+                'has_monthly': row[2] if row[2] is not None else False,
+                'has_annual': row[3] if row[3] is not None else False
             })
 
         return results
@@ -400,8 +400,8 @@ class EquipmentManager:
                 equipment_data['bfm_no'],
                 equipment_data.get('description', ''),
                 equipment_data.get('location', ''),
-                'X' if equipment_data.get('has_monthly', False) else '',
-                'X' if equipment_data.get('has_annual', False) else '',
+                equipment_data.get('has_monthly', False),
+                equipment_data.get('has_annual', False),
                 equipment_data.get('status', 'Active')
             ))
 

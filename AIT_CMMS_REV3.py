@@ -2255,12 +2255,12 @@ class AITCMMSSystem:
         
             # Get the actual counts from your database
             cursor.execute('''
-                SELECT 
+                SELECT
                     COUNT(*) as total_active,
-                    SUM(CASE WHEN monthly_pm = 1 THEN 1 ELSE 0 END) as monthly_pm_count,
-                    SUM(CASE WHEN annual_pm = 1 THEN 1 ELSE 0 END) as annual_pm_count,
+                    SUM(CASE WHEN monthly_pm = TRUE THEN 1 ELSE 0 END) as monthly_pm_count,
+                    SUM(CASE WHEN annual_pm = TRUE THEN 1 ELSE 0 END) as annual_pm_count,
                     SUM(CASE WHEN status IN ('Run to Failure', 'Missing') THEN 1 ELSE 0 END) as excluded_count
-                FROM equipment 
+                FROM equipment
                 WHERE status = 'Active' OR status IS NULL
             ''')
         
@@ -2336,7 +2336,7 @@ class AITCMMSSystem:
                 FROM equipment e
                 LEFT JOIN pm_completions pc ON e.bfm_equipment_no = pc.bfm_equipment_no
                 WHERE e.status = 'Active'
-                AND (e.monthly_pm = 1 OR e.annual_pm = 1)
+                AND (e.monthly_pm = TRUE OR e.annual_pm = TRUE)
                 AND pc.bfm_equipment_no IS NULL
             ''')
             never_done = cursor.fetchone()[0]
@@ -12796,14 +12796,14 @@ class AITCMMSSystem:
             # Equipment statistics
             cursor.execute("SELECT COUNT(*) FROM equipment WHERE status = 'Active'")
             active_equipment = cursor.fetchone()[0]
-            
-            cursor.execute('SELECT COUNT(*) FROM equipment WHERE monthly_pm = 1')
+
+            cursor.execute('SELECT COUNT(*) FROM equipment WHERE monthly_pm = TRUE')
             monthly_pm_equipment = cursor.fetchone()[0]
-            
-            cursor.execute('SELECT COUNT(*) FROM equipment WHERE six_month_pm = 1')
+
+            cursor.execute('SELECT COUNT(*) FROM equipment WHERE six_month_pm = TRUE')
             six_month_pm_equipment = cursor.fetchone()[0]
-            
-            cursor.execute('SELECT COUNT(*) FROM equipment WHERE annual_pm = 1')
+
+            cursor.execute('SELECT COUNT(*) FROM equipment WHERE annual_pm = TRUE')
             annual_pm_equipment = cursor.fetchone()[0]
             
             analytics += "EQUIPMENT OVERVIEW:\n"
@@ -12977,13 +12977,13 @@ class AITCMMSSystem:
             analytics += f"Run to Failure: {rtf_equipment} ({rtf_equipment/total_equipment*100:.1f}%)\n\n"
         
             # PM Type Distribution
-            cursor.execute('SELECT COUNT(*) FROM equipment WHERE monthly_pm = 1')
+            cursor.execute('SELECT COUNT(*) FROM equipment WHERE monthly_pm = TRUE')
             monthly_pm_count = cursor.fetchone()[0]
-        
-            cursor.execute('SELECT COUNT(*) FROM equipment WHERE six_month_pm = 1')
+
+            cursor.execute('SELECT COUNT(*) FROM equipment WHERE six_month_pm = TRUE')
             six_month_pm_count = cursor.fetchone()[0]
-        
-            cursor.execute('SELECT COUNT(*) FROM equipment WHERE annual_pm = 1')
+
+            cursor.execute('SELECT COUNT(*) FROM equipment WHERE annual_pm = TRUE')
             annual_pm_count = cursor.fetchone()[0]
             
             analytics += "PM TYPE REQUIREMENTS:\n"
@@ -13157,9 +13157,9 @@ class AITCMMSSystem:
                 FROM equipment e
                 WHERE e.status = 'Active'
                 AND (
-                    (e.monthly_pm = 1 AND (e.last_monthly_pm IS NULL OR e.last_monthly_pm + INTERVAL '30 days' < CURRENT_DATE))
+                    (e.monthly_pm = TRUE AND (e.last_monthly_pm IS NULL OR e.last_monthly_pm + INTERVAL '30 days' < CURRENT_DATE))
                     OR
-                    (e.annual_pm = 1 AND (e.last_annual_pm IS NULL OR e.last_annual_pm + INTERVAL '365 days' < CURRENT_DATE))
+                    (e.annual_pm = TRUE AND (e.last_annual_pm IS NULL OR e.last_annual_pm + INTERVAL '365 days' < CURRENT_DATE))
                 )
                 ORDER BY e.bfm_equipment_no
                 LIMIT 25
@@ -13614,11 +13614,11 @@ class AITCMMSSystem:
             text += f"Active Equipment: {active_equipment} ({active_equipment/total_equipment*100:.1f}%)\n\n"
         
             # PM requirements
-            cursor.execute('SELECT COUNT(*) FROM equipment WHERE monthly_pm = 1')
+            cursor.execute('SELECT COUNT(*) FROM equipment WHERE monthly_pm = TRUE')
             monthly_count = cursor.fetchone()[0]
             text += f"Equipment requiring Monthly PM: {monthly_count}\n"
-        
-            cursor.execute('SELECT COUNT(*) FROM equipment WHERE annual_pm = 1')
+
+            cursor.execute('SELECT COUNT(*) FROM equipment WHERE annual_pm = TRUE')
             annual_count = cursor.fetchone()[0]
             text += f"Equipment requiring Annual PM: {annual_count}\n"
         
@@ -13996,7 +13996,7 @@ class AITCMMSSystem:
                        JULIANDAY('now') - JULIANDAY(MAX(pc.completion_date)) as days_since_last_pm
                 FROM equipment e
                 LEFT JOIN pm_completions pc ON e.bfm_equipment_no = pc.bfm_equipment_no
-                WHERE e.status = 'Active' AND e.monthly_pm = 1
+                WHERE e.status = 'Active' AND e.monthly_pm = TRUE
                 GROUP BY e.bfm_equipment_no, e.description, e.location
                 HAVING days_since_last_pm > 60 OR last_pm_date IS NULL
                 ORDER BY days_since_last_pm DESC NULLS LAST
@@ -15303,9 +15303,9 @@ class AITCMMSSystem:
         def apply_changes():
             """Apply PM cycle changes to all selected assets"""
             try:
-                monthly_pm = 1 if monthly_var.get() else 0
-                six_month_pm = 1 if six_month_var.get() else 0
-                annual_pm = 1 if annual_var.get() else 0
+                monthly_pm = True if monthly_var.get() else False
+                six_month_pm = True if six_month_var.get() else False
+                annual_pm = True if annual_var.get() else False
                 
                 # Confirm action
                 pm_types = []
