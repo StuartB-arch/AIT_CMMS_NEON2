@@ -1733,14 +1733,18 @@ class MROStockManager:
         total_value = cursor.fetchone()[0] or 0
         
         cursor.execute('''
-            SELECT COUNT(*) FROM mro_inventory 
+            SELECT COUNT(*) FROM mro_inventory
             WHERE quantity_in_stock < minimum_stock AND status = 'Active'
         ''')
         low_stock_count = cursor.fetchone()[0]
-        
+
+        cursor.execute("SELECT SUM(quantity_in_stock) FROM mro_inventory WHERE status = 'Active'")
+        total_quantity = cursor.fetchone()[0] or 0
+
         report.append("SUMMARY")
         report.append("-" * 80)
         report.append(f"Total Active Parts: {total_parts}")
+        report.append(f"Total Quantity in Stock: {total_quantity:,.1f}")
         report.append(f"Total Inventory Value: ${total_value:,.2f}")
         report.append(f"Low Stock Items: {low_stock_count}")
         report.append("")
