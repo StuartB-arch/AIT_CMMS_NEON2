@@ -1710,7 +1710,92 @@ class MROStockManager:
         for row in cursor.fetchall():
             system, count, value = row
             report.append(f"  {system or 'Unknown'}: {count} parts, ${value or 0:,.2f} value")
-        
+
+        report.append("")
+
+        # CM Parts Usage by Month
+        report.append("CM PARTS USAGE - MONTHLY BREAKDOWN")
+        report.append("-" * 80)
+
+        try:
+            # Get monthly summary of parts used in CMs
+            cursor.execute('''
+                SELECT
+                    TO_CHAR(recorded_date, 'YYYY-MM') as month,
+                    COUNT(DISTINCT cm_number) as cm_count,
+                    COUNT(*) as parts_entries,
+                    SUM(quantity_used) as total_quantity,
+                    SUM(total_cost) as total_cost
+                FROM cm_parts_used
+                GROUP BY TO_CHAR(recorded_date, 'YYYY-MM')
+                ORDER BY month DESC
+                LIMIT 12
+            ''')
+
+            monthly_data = cursor.fetchall()
+
+            if monthly_data:
+                report.append("")
+                report.append(f"{'Month':<12} {'CMs':<8} {'Parts':<10} {'Qty Used':<15} {'Total Cost':<15}")
+                report.append("-" * 80)
+
+                grand_total_cost = 0
+                for row in monthly_data:
+                    month = row[0]
+                    cm_count = row[1]
+                    parts_entries = row[2]
+                    total_qty = float(row[3]) if row[3] else 0
+                    total_cost = float(row[4]) if row[4] else 0
+                    grand_total_cost += total_cost
+
+                    report.append(f"{month:<12} {cm_count:<8} {parts_entries:<10} {total_qty:<15.1f} ${total_cost:<14,.2f}")
+
+                report.append("-" * 80)
+                report.append(f"{'Total Cost (Last 12 Months):':<60} ${grand_total_cost:,.2f}")
+            else:
+                report.append("  No CM parts usage data available")
+
+            report.append("")
+
+            # Top 10 most used parts in CMs
+            report.append("TOP 10 PARTS USED IN CMs (ALL TIME)")
+            report.append("-" * 80)
+
+            cursor.execute('''
+                SELECT
+                    cpu.part_number,
+                    mi.name,
+                    COUNT(DISTINCT cpu.cm_number) as cm_count,
+                    SUM(cpu.quantity_used) as total_qty,
+                    SUM(cpu.total_cost) as total_cost
+                FROM cm_parts_used cpu
+                LEFT JOIN mro_inventory mi ON cpu.part_number = mi.part_number
+                GROUP BY cpu.part_number, mi.name
+                ORDER BY total_qty DESC
+                LIMIT 10
+            ''')
+
+            top_parts = cursor.fetchall()
+
+            if top_parts:
+                report.append("")
+                report.append(f"{'Part Number':<15} {'Description':<30} {'CMs':<8} {'Qty':<12} {'Cost':<15}")
+                report.append("-" * 80)
+
+                for row in top_parts:
+                    part_num = row[0]
+                    name = (row[1] or 'N/A')[:28]  # Truncate to fit
+                    cm_count = row[2]
+                    qty = float(row[3]) if row[3] else 0
+                    cost = float(row[4]) if row[4] else 0
+
+                    report.append(f"{part_num:<15} {name:<30} {cm_count:<8} {qty:<12.1f} ${cost:<14,.2f}")
+            else:
+                report.append("  No parts usage data available")
+
+        except Exception as e:
+            report.append(f"  Error loading CM parts data: {str(e)}")
+
         report.append("")
         report.append("=" * 80)
         report.append("END OF REPORT")
