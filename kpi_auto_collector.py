@@ -129,8 +129,8 @@ class KPIAutoCollector:
         cursor.execute('''
             SELECT COUNT(*)
             FROM corrective_maintenance
-            WHERE date_opened >= %s
-            AND date_opened <= %s
+            WHERE reported_date >= %s
+            AND reported_date <= %s
         ''', (start_date, end_date))
 
         wo_opened = cursor.fetchone()[0] or 0
@@ -161,8 +161,8 @@ class KPIAutoCollector:
         cursor.execute('''
             SELECT COUNT(*)
             FROM corrective_maintenance
-            WHERE date_closed >= %s
-            AND date_closed <= %s
+            WHERE closed_date >= %s
+            AND closed_date <= %s
         ''', (start_date, end_date))
 
         wo_closed = cursor.fetchone()[0] or 0
@@ -192,8 +192,8 @@ class KPIAutoCollector:
         cursor.execute('''
             SELECT COUNT(*)
             FROM corrective_maintenance
-            WHERE date_opened <= %s
-            AND (date_closed IS NULL OR date_closed > %s)
+            WHERE reported_date <= %s
+            AND (closed_date IS NULL OR closed_date > %s)
         ''', (end_date, end_date))
 
         backlog = cursor.fetchone()[0] or 0
@@ -201,13 +201,13 @@ class KPIAutoCollector:
         # Also get age profile
         cursor.execute('''
             SELECT
-                COUNT(CASE WHEN %s::date - date_opened::date <= 7 THEN 1 END) as week_0_7,
-                COUNT(CASE WHEN %s::date - date_opened::date BETWEEN 8 AND 30 THEN 1 END) as week_8_30,
-                COUNT(CASE WHEN %s::date - date_opened::date BETWEEN 31 AND 60 THEN 1 END) as days_31_60,
-                COUNT(CASE WHEN %s::date - date_opened::date > 60 THEN 1 END) as days_over_60
+                COUNT(CASE WHEN %s::date - reported_date::date <= 7 THEN 1 END) as week_0_7,
+                COUNT(CASE WHEN %s::date - reported_date::date BETWEEN 8 AND 30 THEN 1 END) as week_8_30,
+                COUNT(CASE WHEN %s::date - reported_date::date BETWEEN 31 AND 60 THEN 1 END) as days_31_60,
+                COUNT(CASE WHEN %s::date - reported_date::date > 60 THEN 1 END) as days_over_60
             FROM corrective_maintenance
-            WHERE date_opened <= %s
-            AND (date_closed IS NULL OR date_closed > %s)
+            WHERE reported_date <= %s
+            AND (closed_date IS NULL OR closed_date > %s)
         ''', (end_date, end_date, end_date, end_date, end_date, end_date))
 
         age_profile = cursor.fetchone()
@@ -246,15 +246,15 @@ class KPIAutoCollector:
         cursor.execute('''
             SELECT COALESCE(SUM(
                 CASE
-                    WHEN date_closed IS NOT NULL THEN
-                        date_closed::date - date_opened::date
+                    WHEN closed_date IS NOT NULL THEN
+                        closed_date::date - reported_date::date
                     ELSE
-                        %s::date - date_opened::date
+                        %s::date - reported_date::date
                 END
             ), 0)
             FROM corrective_maintenance
-            WHERE date_opened >= %s
-            AND date_opened <= %s
+            WHERE reported_date >= %s
+            AND reported_date <= %s
         ''', (end_date, start_date, end_date))
 
         total_downtime_days = cursor.fetchone()[0] or 0
@@ -313,8 +313,8 @@ class KPIAutoCollector:
         cursor.execute('''
             SELECT COUNT(*)
             FROM corrective_maintenance
-            WHERE date_opened >= %s
-            AND date_opened <= %s
+            WHERE reported_date >= %s
+            AND reported_date <= %s
         ''', (start_date, end_date))
 
         failure_count = cursor.fetchone()[0] or 0
@@ -361,12 +361,12 @@ class KPIAutoCollector:
             SELECT
                 COUNT(*) as repair_count,
                 COALESCE(AVG(
-                    EXTRACT(EPOCH FROM (date_closed::timestamp - date_opened::timestamp)) / 3600
+                    EXTRACT(EPOCH FROM (closed_date::timestamp - reported_date::timestamp)) / 3600
                 ), 0) as avg_repair_hours
             FROM corrective_maintenance
-            WHERE date_closed IS NOT NULL
-            AND date_closed >= %s
-            AND date_closed <= %s
+            WHERE closed_date IS NOT NULL
+            AND closed_date >= %s
+            AND closed_date <= %s
         ''', (start_date, end_date))
 
         row = cursor.fetchone()
@@ -410,8 +410,8 @@ class KPIAutoCollector:
         cursor.execute('''
             SELECT COALESCE(SUM(labor_hours), 0)
             FROM corrective_maintenance
-            WHERE date_opened >= %s
-            AND date_opened <= %s
+            WHERE reported_date >= %s
+            AND reported_date <= %s
         ''', (start_date, end_date))
         cm_hours = float(cursor.fetchone()[0] or 0)
 
