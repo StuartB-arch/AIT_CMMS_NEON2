@@ -334,100 +334,100 @@ class EquipmentHistory:
                 'recommendations': []
             }
 
-        # Get equipment info
-        cursor.execute('SELECT status, monthly_pm, annual_pm FROM equipment WHERE bfm_equipment_no = %s', (bfm_no,))
-        equip_row = cursor.fetchone()
-        if not equip_row:
-            return metrics
+            # Get equipment info
+            cursor.execute('SELECT status, monthly_pm, annual_pm FROM equipment WHERE bfm_equipment_no = %s', (bfm_no,))
+            equip_row = cursor.fetchone()
+            if not equip_row:
+                return metrics
 
-        metrics['status'] = equip_row[0]
+            metrics['status'] = equip_row[0]
 
-        # Calculate PM compliance (last 12 months)
-        one_year_ago = (datetime.now() - timedelta(days=365)).strftime('%Y-%m-%d')
+            # Calculate PM compliance (last 12 months)
+            one_year_ago = (datetime.now() - timedelta(days=365)).strftime('%Y-%m-%d')
 
-        # Count expected PMs
-        expected_pms = 0
-        if equip_row[1] == 'X':  # Has monthly PM
-            expected_pms += 12
-        if equip_row[2] == 'X':  # Has annual PM
-            expected_pms += 1
+            # Count expected PMs
+            expected_pms = 0
+            if equip_row[1] == 'X':  # Has monthly PM
+                expected_pms += 12
+            if equip_row[2] == 'X':  # Has annual PM
+                expected_pms += 1
 
-        # Count completed PMs
-        cursor.execute('''
-            SELECT COUNT(*)
-            FROM pm_completions
-            WHERE bfm_equipment_no = %s
-            AND completion_date >= %s
-        ''', (bfm_no, one_year_ago))
-        completed_pms = cursor.fetchone()[0]
+            # Count completed PMs
+            cursor.execute('''
+                SELECT COUNT(*)
+                FROM pm_completions
+                WHERE bfm_equipment_no = %s
+                AND completion_date >= %s
+            ''', (bfm_no, one_year_ago))
+            completed_pms = cursor.fetchone()[0]
 
-        if expected_pms > 0:
-            metrics['pm_compliance'] = min(100, int((completed_pms / expected_pms) * 100))
+            if expected_pms > 0:
+                metrics['pm_compliance'] = min(100, int((completed_pms / expected_pms) * 100))
 
-        # Count CMs in last 12 months
-        cursor.execute('''
-            SELECT COUNT(*)
-            FROM corrective_maintenance
-            WHERE bfm_equipment_no = %s
-            AND reported_date >= %s
-        ''', (bfm_no, one_year_ago))
-        cm_count = cursor.fetchone()[0]
-        metrics['cm_frequency'] = round(cm_count / 12, 1)
+            # Count CMs in last 12 months
+            cursor.execute('''
+                SELECT COUNT(*)
+                FROM corrective_maintenance
+                WHERE bfm_equipment_no = %s
+                AND reported_date >= %s
+            ''', (bfm_no, one_year_ago))
+            cm_count = cursor.fetchone()[0]
+            metrics['cm_frequency'] = round(cm_count / 12, 1)
 
-        # Calculate total labor hours
-        cursor.execute('''
-            SELECT COALESCE(SUM(labor_hours), 0)
-            FROM pm_completions
-            WHERE bfm_equipment_no = %s
-            AND completion_date >= %s
-        ''', (bfm_no, one_year_ago))
-        pm_hours = cursor.fetchone()[0] or 0
+            # Calculate total labor hours
+            cursor.execute('''
+                SELECT COALESCE(SUM(labor_hours), 0)
+                FROM pm_completions
+                WHERE bfm_equipment_no = %s
+                AND completion_date >= %s
+            ''', (bfm_no, one_year_ago))
+            pm_hours = cursor.fetchone()[0] or 0
 
-        cursor.execute('''
-            SELECT COALESCE(SUM(labor_hours), 0)
-            FROM corrective_maintenance
-            WHERE bfm_equipment_no = %s
-            AND reported_date >= %s
-        ''', (bfm_no, one_year_ago))
-        cm_hours = cursor.fetchone()[0] or 0
+            cursor.execute('''
+                SELECT COALESCE(SUM(labor_hours), 0)
+                FROM corrective_maintenance
+                WHERE bfm_equipment_no = %s
+                AND reported_date >= %s
+            ''', (bfm_no, one_year_ago))
+            cm_hours = cursor.fetchone()[0] or 0
 
-        metrics['labor_hours'] = float(pm_hours) + float(cm_hours)
+            metrics['labor_hours'] = float(pm_hours) + float(cm_hours)
 
-        # Calculate parts cost
-        cursor.execute('''
-            SELECT COALESCE(SUM(cpr.estimated_cost * cpr.quantity), 0)
-            FROM cm_parts_requests cpr
-            JOIN corrective_maintenance cm ON cpr.cm_number = cm.cm_number
-            WHERE cm.bfm_equipment_no = %s
-            AND cpr.request_date >= %s
-        ''', (bfm_no, one_year_ago))
-        metrics['parts_cost'] = float(cursor.fetchone()[0] or 0)
+            # Calculate parts cost
+            cursor.execute('''
+                SELECT COALESCE(SUM(cpr.estimated_cost * cpr.quantity), 0)
+                FROM cm_parts_requests cpr
+                JOIN corrective_maintenance cm ON cpr.cm_number = cm.cm_number
+                WHERE cm.bfm_equipment_no = %s
+                AND cpr.request_date >= %s
+            ''', (bfm_no, one_year_ago))
+            metrics['parts_cost'] = float(cursor.fetchone()[0] or 0)
 
-        # Calculate health score (0-100)
-        score = 100
+            # Calculate health score (0-100)
+            score = 100
 
-        # Deduct for poor PM compliance
-        score -= (100 - metrics['pm_compliance']) * 0.3
+            # Deduct for poor PM compliance
+            score -= (100 - metrics['pm_compliance']) * 0.3
 
-        # Deduct for high CM frequency (more than 1 per month is concerning)
-        if metrics['cm_frequency'] > 1:
-            score -= min(20, (metrics['cm_frequency'] - 1) * 10)
+            # Deduct for high CM frequency (more than 1 per month is concerning)
+            if metrics['cm_frequency'] > 1:
+                score -= min(20, (metrics['cm_frequency'] - 1) * 10)
 
-        # Deduct for inactive status
-        if metrics['status'] != 'Active':
-            score -= 30
+            # Deduct for inactive status
+            if metrics['status'] != 'Active':
+                score -= 30
 
-        metrics['health_score'] = max(0, int(score))
+            metrics['health_score'] = max(0, int(score))
 
-        # Generate recommendations
-        if metrics['pm_compliance'] < 80:
-            metrics['recommendations'].append("Improve PM compliance - currently below 80%")
-        if metrics['cm_frequency'] > 2:
-            metrics['recommendations'].append("High CM frequency - investigate root causes")
-        if metrics['parts_cost'] > 5000:
-            metrics['recommendations'].append("High parts cost - consider equipment replacement")
-        if metrics['status'] != 'Active':
-            metrics['recommendations'].append(f"Equipment status is '{metrics['status']}' - review and update")
+            # Generate recommendations
+            if metrics['pm_compliance'] < 80:
+                metrics['recommendations'].append("Improve PM compliance - currently below 80%")
+            if metrics['cm_frequency'] > 2:
+                metrics['recommendations'].append("High CM frequency - investigate root causes")
+            if metrics['parts_cost'] > 5000:
+                metrics['recommendations'].append("High parts cost - consider equipment replacement")
+            if metrics['status'] != 'Active':
+                metrics['recommendations'].append(f"Equipment status is '{metrics['status']}' - review and update")
 
             # Commit to end transaction cleanly
             self.conn.commit()
@@ -463,62 +463,62 @@ class EquipmentHistory:
                 'months': []
             }
 
-        # Generate month labels
-        current_date = datetime.now()
-        for i in range(months):
-            month_date = current_date - timedelta(days=30 * i)
-            trends['months'].insert(0, month_date.strftime('%Y-%m'))
+            # Generate month labels
+            current_date = datetime.now()
+            for i in range(months):
+                month_date = current_date - timedelta(days=30 * i)
+                trends['months'].insert(0, month_date.strftime('%Y-%m'))
 
-        # Get monthly data
-        for month in trends['months']:
-            month_start = f"{month}-01"
-            # Calculate month end
-            year, mon = map(int, month.split('-'))
-            if mon == 12:
-                month_end = f"{year + 1}-01-01"
-            else:
-                month_end = f"{year}-{mon + 1:02d}-01"
+            # Get monthly data
+            for month in trends['months']:
+                month_start = f"{month}-01"
+                # Calculate month end
+                year, mon = map(int, month.split('-'))
+                if mon == 12:
+                    month_end = f"{year + 1}-01-01"
+                else:
+                    month_end = f"{year}-{mon + 1:02d}-01"
 
-            # PM count
-            cursor.execute('''
-                SELECT COUNT(*)
-                FROM pm_completions
-                WHERE bfm_equipment_no = %s
-                AND completion_date >= %s
-                AND completion_date < %s
-            ''', (bfm_no, month_start, month_end))
-            trends['monthly_pm_counts'].append(cursor.fetchone()[0])
+                # PM count
+                cursor.execute('''
+                    SELECT COUNT(*)
+                    FROM pm_completions
+                    WHERE bfm_equipment_no = %s
+                    AND completion_date >= %s
+                    AND completion_date < %s
+                ''', (bfm_no, month_start, month_end))
+                trends['monthly_pm_counts'].append(cursor.fetchone()[0])
 
-            # CM count
-            cursor.execute('''
-                SELECT COUNT(*)
-                FROM corrective_maintenance
-                WHERE bfm_equipment_no = %s
-                AND reported_date >= %s
-                AND reported_date < %s
-            ''', (bfm_no, month_start, month_end))
-            trends['monthly_cm_counts'].append(cursor.fetchone()[0])
+                # CM count
+                cursor.execute('''
+                    SELECT COUNT(*)
+                    FROM corrective_maintenance
+                    WHERE bfm_equipment_no = %s
+                    AND reported_date >= %s
+                    AND reported_date < %s
+                ''', (bfm_no, month_start, month_end))
+                trends['monthly_cm_counts'].append(cursor.fetchone()[0])
 
-            # Labor hours
-            cursor.execute('''
-                SELECT COALESCE(SUM(labor_hours), 0)
-                FROM pm_completions
-                WHERE bfm_equipment_no = %s
-                AND completion_date >= %s
-                AND completion_date < %s
-            ''', (bfm_no, month_start, month_end))
-            pm_hours = cursor.fetchone()[0] or 0
+                # Labor hours
+                cursor.execute('''
+                    SELECT COALESCE(SUM(labor_hours), 0)
+                    FROM pm_completions
+                    WHERE bfm_equipment_no = %s
+                    AND completion_date >= %s
+                    AND completion_date < %s
+                ''', (bfm_no, month_start, month_end))
+                pm_hours = cursor.fetchone()[0] or 0
 
-            cursor.execute('''
-                SELECT COALESCE(SUM(labor_hours), 0)
-                FROM corrective_maintenance
-                WHERE bfm_equipment_no = %s
-                AND reported_date >= %s
-                AND reported_date < %s
-            ''', (bfm_no, month_start, month_end))
-            cm_hours = cursor.fetchone()[0] or 0
+                cursor.execute('''
+                    SELECT COALESCE(SUM(labor_hours), 0)
+                    FROM corrective_maintenance
+                    WHERE bfm_equipment_no = %s
+                    AND reported_date >= %s
+                    AND reported_date < %s
+                ''', (bfm_no, month_start, month_end))
+                cm_hours = cursor.fetchone()[0] or 0
 
-            trends['monthly_labor_hours'].append(float(pm_hours) + float(cm_hours))
+                trends['monthly_labor_hours'].append(float(pm_hours) + float(cm_hours))
 
             # Commit to end transaction cleanly
             self.conn.commit()
