@@ -79,7 +79,7 @@ class EquipmentHistory:
 
         query = '''
             SELECT completion_date, pm_type, technician_name, labor_hours,
-                   notes, special_equipment_used
+                   notes, special_equipment
             FROM pm_completions
             WHERE bfm_equipment_no = %s
         '''
@@ -159,8 +159,8 @@ class EquipmentHistory:
 
         # Get parts from CM parts requests
         query = '''
-            SELECT cpr.request_date, cpr.part_description, cpr.quantity,
-                   cpr.supplier, cpr.estimated_cost, cm.cm_number
+            SELECT cpr.requested_date, cpr.part_number, cpr.model_number,
+                   cpr.requested_by, cpr.notes, cm.cm_number
             FROM cm_parts_requests cpr
             JOIN corrective_maintenance cm ON cpr.cm_number = cm.cm_number
             WHERE cm.bfm_equipment_no = %s
@@ -168,13 +168,13 @@ class EquipmentHistory:
         params = [bfm_no]
 
         if start_date:
-            query += ' AND cpr.request_date >= %s'
+            query += ' AND cpr.requested_date >= %s'
             params.append(start_date)
         if end_date:
-            query += ' AND cpr.request_date <= %s'
+            query += ' AND cpr.requested_date <= %s'
             params.append(end_date)
 
-        query += ' ORDER BY cpr.request_date DESC'
+        query += ' ORDER BY cpr.requested_date DESC'
 
         cursor.execute(query, params)
 
@@ -183,10 +183,10 @@ class EquipmentHistory:
             results.append({
                 'type': 'PART',
                 'date': row[0],
-                'part_description': row[1],
-                'quantity': row[2],
-                'supplier': row[3],
-                'cost': row[4],
+                'part_number': row[1],
+                'model_number': row[2],
+                'requested_by': row[3],
+                'notes': row[4],
                 'cm_number': row[5]
             })
 
@@ -286,10 +286,10 @@ class EquipmentHistory:
             events.append({
                 'date': part['date'],
                 'type': 'PART',
-                'category': 'Parts Usage',
-                'title': f"Part: {part['part_description']}",
-                'details': f"Qty: {part['quantity']}, Cost: ${part['cost']}",
-                'notes': f"CM: {part['cm_number']}, Supplier: {part['supplier']}",
+                'category': 'Parts Request',
+                'title': f"Part: {part['part_number']}",
+                'details': f"Model: {part['model_number']}, Requested by: {part['requested_by']}",
+                'notes': f"CM: {part['cm_number']}, Notes: {part['notes']}",
                 'color': '#2196F3'  # Blue
             })
 
@@ -393,15 +393,16 @@ class EquipmentHistory:
 
             metrics['labor_hours'] = float(pm_hours) + float(cm_hours)
 
-            # Calculate parts cost
+            # Calculate parts count (cost data not available in schema)
             cursor.execute('''
-                SELECT COALESCE(SUM(cpr.estimated_cost * cpr.quantity), 0)
+                SELECT COUNT(*)
                 FROM cm_parts_requests cpr
                 JOIN corrective_maintenance cm ON cpr.cm_number = cm.cm_number
                 WHERE cm.bfm_equipment_no = %s
-                AND cpr.request_date >= %s
+                AND cpr.requested_date >= %s
             ''', (bfm_no, one_year_ago))
-            metrics['parts_cost'] = float(cursor.fetchone()[0] or 0)
+            metrics['parts_cost'] = 0  # Not available in current schema
+            metrics['parts_count'] = cursor.fetchone()[0] or 0
 
             # Calculate health score (0-100)
             score = 100
@@ -424,8 +425,8 @@ class EquipmentHistory:
                 metrics['recommendations'].append("Improve PM compliance - currently below 80%")
             if metrics['cm_frequency'] > 2:
                 metrics['recommendations'].append("High CM frequency - investigate root causes")
-            if metrics['parts_cost'] > 5000:
-                metrics['recommendations'].append("High parts cost - consider equipment replacement")
+            if metrics['parts_count'] > 20:
+                metrics['recommendations'].append("High parts usage - review equipment reliability")
             if metrics['status'] != 'Active':
                 metrics['recommendations'].append(f"Equipment status is '{metrics['status']}' - review and update")
 
@@ -691,7 +692,7 @@ METRICS:
 - PM Compliance: {health['pm_compliance']}%
 - CM Frequency: {health['cm_frequency']} per month
 - Total Labor Hours (12 months): {health['labor_hours']:.1f} hours
-- Parts Cost (12 months): ${health['parts_cost']:.2f}
+- Parts Requests (12 months): {health.get('parts_count', 0)} requests
 
 RECOMMENDATIONS:
 """
