@@ -1826,7 +1826,16 @@ def export_professional_monthly_report_pdf(conn, month=None, year=None):
             spaceAfter=6,
             fontName='Helvetica-Bold'
         )
-    
+
+        body_style = ParagraphStyle(
+            'CustomBody',
+            parent=styles['Normal'],
+            fontSize=10,
+            textColor=colors.HexColor('#2d3748'),
+            spaceAfter=6,
+            fontName='Helvetica'
+        )
+
         # ==================== TITLE PAGE ====================
         story.append(Paragraph("AIRBUS AIT", title_style))
         story.append(Paragraph("Monthly Maintenance Summary Report", 
