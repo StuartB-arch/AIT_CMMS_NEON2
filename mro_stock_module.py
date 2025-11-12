@@ -1783,8 +1783,83 @@ class MROStockManager:
         for row in cursor.fetchall():
             system, count, value = row
             report.append(f"  {system or 'Unknown'}: {count} parts, ${value or 0:,.2f} value")
-        
+
         report.append("")
+
+        # Parts used in Corrective Maintenance
+        report.append("PARTS USED IN CORRECTIVE MAINTENANCE")
+        report.append("-" * 80)
+
+        # Get CM summary statistics
+        cursor.execute('''
+            SELECT
+                COUNT(DISTINCT cm_number) as cm_count,
+                SUM(total_cost) as total_cm_cost
+            FROM cm_parts_used
+        ''')
+        cm_stats = cursor.fetchone()
+        cm_count = cm_stats[0] or 0
+        total_cm_cost = cm_stats[1] or 0
+
+        report.append(f"Total CMs with Parts Used: {cm_count}")
+        report.append(f"Total Parts Cost in CMs: ${total_cm_cost:,.2f}")
+        report.append("")
+
+        if cm_count > 0:
+            # Get detailed CM parts usage
+            cursor.execute('''
+                SELECT
+                    cp.cm_number,
+                    cp.recorded_date,
+                    cp.part_number,
+                    mi.name as part_name,
+                    cp.quantity_used,
+                    mi.unit_of_measure,
+                    cp.total_cost,
+                    cp.recorded_by
+                FROM cm_parts_used cp
+                JOIN mro_inventory mi ON cp.part_number = mi.part_number
+                ORDER BY cp.cm_number, cp.recorded_date DESC, cp.part_number
+            ''')
+
+            cm_parts = cursor.fetchall()
+
+            # Group by CM number
+            current_cm = None
+            cm_total = 0
+
+            for row in cm_parts:
+                cm_num, rec_date, part_num, part_name, qty, unit, cost, rec_by = row
+
+                # New CM section
+                if current_cm != cm_num:
+                    # Print previous CM total
+                    if current_cm is not None:
+                        report.append(f"    CM Total: ${cm_total:,.2f}")
+                        report.append("")
+
+                    # Start new CM
+                    current_cm = cm_num
+                    cm_total = 0
+                    report.append(f"  CM: {cm_num}")
+                    if rec_date:
+                        report.append(f"  Date: {rec_date}")
+                    if rec_by:
+                        report.append(f"  Recorded By: {rec_by}")
+
+                # Add part details
+                report.append(f"    • {part_num} - {part_name}")
+                report.append(f"      Qty: {qty} {unit or ''} | Cost: ${cost or 0:,.2f}")
+                cm_total += (cost or 0)
+
+            # Print last CM total
+            if current_cm is not None:
+                report.append(f"    CM Total: ${cm_total:,.2f}")
+                report.append("")
+        else:
+            report.append("  No parts usage recorded in corrective maintenance.")
+            report.append("")
+
         report.append("=" * 80)
         report.append("END OF REPORT")
         report.append("=" * 80)
