@@ -1329,9 +1329,17 @@ def generate_monthly_summary_report(conn, month=None, year=None):
         for cm_data in closed_cms:
             cm_number, created_date, completion_date, technician, equipment, description, days = cm_data
 
-            # Format dates
-            created_str = created_date.strftime('%Y-%m-%d') if created_date else "Unknown"
-            completed_str = completion_date.strftime('%Y-%m-%d') if completion_date else "Unknown"
+            # Format dates - handle both string and datetime objects
+            if created_date:
+                created_str = created_date.strftime('%Y-%m-%d') if hasattr(created_date, 'strftime') else str(created_date)[:10]
+            else:
+                created_str = "Unknown"
+
+            if completion_date:
+                completed_str = completion_date.strftime('%Y-%m-%d') if hasattr(completion_date, 'strftime') else str(completion_date)[:10]
+            else:
+                completed_str = "Unknown"
+
             tech_name = technician if technician else "Unassigned"
             equip_str = equipment if equipment else "N/A"
             desc_str = (description[:60] + "...") if description and len(description) > 60 else (description or "No description")
@@ -1980,9 +1988,17 @@ def export_professional_monthly_report_pdf(conn, month=None, year=None):
             for cm_data in closed_cms:
                 cm_number, created_date, completion_date, technician, equipment, description, days = cm_data
 
-                # Format dates
-                created_str = created_date.strftime('%Y-%m-%d') if created_date else "Unknown"
-                completed_str = completion_date.strftime('%Y-%m-%d') if completion_date else "Unknown"
+                # Format dates - handle both string and datetime objects
+                if created_date:
+                    created_str = created_date.strftime('%Y-%m-%d') if hasattr(created_date, 'strftime') else str(created_date)[:10]
+                else:
+                    created_str = "Unknown"
+
+                if completion_date:
+                    completed_str = completion_date.strftime('%Y-%m-%d') if hasattr(completion_date, 'strftime') else str(completion_date)[:10]
+                else:
+                    completed_str = "Unknown"
+
                 tech_name = technician if technician else "Unassigned"
                 equip_str = equipment if equipment else "N/A"
                 desc_str = (description[:80] + "...") if description and len(description) > 80 else (description or "No description")
