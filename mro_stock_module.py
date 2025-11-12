@@ -1721,13 +1721,13 @@ class MROStockManager:
             # Get monthly summary of parts used in CMs
             cursor.execute('''
                 SELECT
-                    TO_CHAR(recorded_date, 'YYYY-MM') as month,
+                    TO_CHAR(recorded_date::timestamp, 'YYYY-MM') as month,
                     COUNT(DISTINCT cm_number) as cm_count,
                     COUNT(*) as parts_entries,
                     SUM(quantity_used) as total_quantity,
                     SUM(total_cost) as total_cost
                 FROM cm_parts_used
-                GROUP BY TO_CHAR(recorded_date, 'YYYY-MM')
+                GROUP BY TO_CHAR(recorded_date::timestamp, 'YYYY-MM')
                 ORDER BY month DESC
                 LIMIT 12
             ''')
