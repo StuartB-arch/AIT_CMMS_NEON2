@@ -40,26 +40,37 @@ class EquipmentHistory:
         Returns:
             Dictionary with categorized history records
         """
-        history = {
-            'pm_completions': [],
-            'corrective_maintenance': [],
-            'parts_used': [],
-            'status_changes': []
-        }
+        try:
+            history = {
+                'pm_completions': [],
+                'corrective_maintenance': [],
+                'parts_used': [],
+                'status_changes': []
+            }
 
-        # Get PM completions
-        history['pm_completions'] = self._get_pm_history(bfm_no, start_date, end_date)
+            # Get PM completions
+            history['pm_completions'] = self._get_pm_history(bfm_no, start_date, end_date)
 
-        # Get corrective maintenance
-        history['corrective_maintenance'] = self._get_cm_history(bfm_no, start_date, end_date)
+            # Get corrective maintenance
+            history['corrective_maintenance'] = self._get_cm_history(bfm_no, start_date, end_date)
 
-        # Get parts usage
-        history['parts_used'] = self._get_parts_history(bfm_no, start_date, end_date)
+            # Get parts usage
+            history['parts_used'] = self._get_parts_history(bfm_no, start_date, end_date)
 
-        # Get status changes from audit log
-        history['status_changes'] = self._get_status_changes(bfm_no, start_date, end_date)
+            # Get status changes from audit log
+            history['status_changes'] = self._get_status_changes(bfm_no, start_date, end_date)
 
-        return history
+            # Commit to end transaction cleanly
+            self.conn.commit()
+
+            return history
+        except Exception as e:
+            # Rollback on error
+            try:
+                self.conn.rollback()
+            except:
+                pass
+            raise e
 
     def _get_pm_history(self, bfm_no: str, start_date: Optional[str] = None,
                        end_date: Optional[str] = None) -> List[Dict]:
@@ -309,18 +320,19 @@ class EquipmentHistory:
         Returns:
             Dictionary with health metrics
         """
-        cursor = self.conn.cursor()
+        try:
+            cursor = self.conn.cursor()
 
-        metrics = {
-            'health_score': 0,  # 0-100
-            'pm_compliance': 0,  # Percentage of on-time PMs
-            'cm_frequency': 0,  # CMs per month
-            'downtime_days': 0,  # Average downtime
-            'parts_cost': 0,  # Total parts cost (last 12 months)
-            'labor_hours': 0,  # Total labor hours (last 12 months)
-            'status': 'Unknown',
-            'recommendations': []
-        }
+            metrics = {
+                'health_score': 0,  # 0-100
+                'pm_compliance': 0,  # Percentage of on-time PMs
+                'cm_frequency': 0,  # CMs per month
+                'downtime_days': 0,  # Average downtime
+                'parts_cost': 0,  # Total parts cost (last 12 months)
+                'labor_hours': 0,  # Total labor hours (last 12 months)
+                'status': 'Unknown',
+                'recommendations': []
+            }
 
         # Get equipment info
         cursor.execute('SELECT status, monthly_pm, annual_pm FROM equipment WHERE bfm_equipment_no = %s', (bfm_no,))
@@ -417,7 +429,17 @@ class EquipmentHistory:
         if metrics['status'] != 'Active':
             metrics['recommendations'].append(f"Equipment status is '{metrics['status']}' - review and update")
 
-        return metrics
+            # Commit to end transaction cleanly
+            self.conn.commit()
+
+            return metrics
+        except Exception as e:
+            # Rollback on error
+            try:
+                self.conn.rollback()
+            except:
+                pass
+            raise e
 
     def get_maintenance_trends(self, bfm_no: str, months: int = 12) -> Dict:
         """
@@ -430,15 +452,16 @@ class EquipmentHistory:
         Returns:
             Dictionary with trend data
         """
-        cursor = self.conn.cursor()
+        try:
+            cursor = self.conn.cursor()
 
-        trends = {
-            'monthly_pm_counts': [],
-            'monthly_cm_counts': [],
-            'monthly_labor_hours': [],
-            'monthly_parts_cost': [],
-            'months': []
-        }
+            trends = {
+                'monthly_pm_counts': [],
+                'monthly_cm_counts': [],
+                'monthly_labor_hours': [],
+                'monthly_parts_cost': [],
+                'months': []
+            }
 
         # Generate month labels
         current_date = datetime.now()
@@ -497,7 +520,17 @@ class EquipmentHistory:
 
             trends['monthly_labor_hours'].append(float(pm_hours) + float(cm_hours))
 
-        return trends
+            # Commit to end transaction cleanly
+            self.conn.commit()
+
+            return trends
+        except Exception as e:
+            # Rollback on error
+            try:
+                self.conn.rollback()
+            except:
+                pass
+            raise e
 
 
 class EquipmentHistoryViewer:

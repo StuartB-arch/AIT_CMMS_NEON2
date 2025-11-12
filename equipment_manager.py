@@ -367,10 +367,21 @@ class EquipmentManager:
         Returns:
             True if exists, False otherwise
         """
-        cursor = self.conn.cursor()
-        cursor.execute('SELECT COUNT(*) FROM equipment WHERE bfm_equipment_no = %s', (bfm_no,))
-        count = cursor.fetchone()[0]
-        return count > 0
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute('SELECT COUNT(*) FROM equipment WHERE bfm_equipment_no = %s', (bfm_no,))
+            count = cursor.fetchone()[0]
+            cursor.close()
+            # Commit to end the transaction cleanly
+            self.conn.commit()
+            return count > 0
+        except Exception as e:
+            # Rollback on error
+            try:
+                self.conn.rollback()
+            except:
+                pass
+            raise e
 
     def add_equipment(self, equipment_data: Dict, user_id: str) -> Tuple[bool, str]:
         """
