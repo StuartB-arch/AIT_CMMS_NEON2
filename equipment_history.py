@@ -79,7 +79,7 @@ class EquipmentHistory:
 
         query = '''
             SELECT completion_date, pm_type, technician_name, labor_hours,
-                   notes, special_equipment_used
+                   notes, special_equipment
             FROM pm_completions
             WHERE bfm_equipment_no = %s
         '''
