@@ -1316,6 +1316,7 @@ def generate_monthly_summary_report(conn, month=None, year=None):
                 cm.assigned_technician,
                 cm.bfm_equipment_no,
                 cm.description,
+                cm.priority,
                 (cm.completion_date::date - cm.created_date::date) as days_to_close
             FROM corrective_maintenance cm
             WHERE EXTRACT(YEAR FROM cm.completion_date::date) = %s
@@ -1327,7 +1328,7 @@ def generate_monthly_summary_report(conn, month=None, year=None):
         closed_cms = cursor.fetchall()
 
         for cm_data in closed_cms:
-            cm_number, created_date, completion_date, technician, equipment, description, days = cm_data
+            cm_number, created_date, completion_date, technician, equipment, description, priority, days = cm_data
 
             # Format dates - handle both string and datetime objects
             if created_date:
@@ -1343,8 +1344,10 @@ def generate_monthly_summary_report(conn, month=None, year=None):
             tech_name = technician if technician else "Unassigned"
             equip_str = equipment if equipment else "N/A"
             desc_str = (description[:60] + "...") if description and len(description) > 60 else (description or "No description")
+            priority_str = priority if priority else "N/A"
 
             print(f"CM Number: {cm_number}")
+            print(f"  Priority: {priority_str}")
             print(f"  Equipment: {equip_str}")
             print(f"  Description: {desc_str}")
             print(f"  Date Created: {created_str}")
@@ -1399,6 +1402,97 @@ def generate_monthly_summary_report(conn, month=None, year=None):
     if cms_open_current > 0:
         print(f"    - Total Days Open (All Open CMs): {cms_total_days_open} days")
         print(f"    - Average Days Open per CM: {cms_avg_days_open:.1f} days")
+        print()
+
+        # Detailed breakdown of currently open CMs
+        print("=" * 100)
+        print(f"DETAILED BREAKDOWN: CURRENTLY OPEN CMs")
+        print("=" * 100)
+        print()
+        print("Calculation: Days Open = Current Date - Date Created")
+        print()
+
+        # Query all currently open CMs with their details
+        cursor.execute('''
+            SELECT
+                cm.cm_number,
+                cm.created_date,
+                cm.assigned_technician,
+                cm.bfm_equipment_no,
+                cm.description,
+                cm.priority,
+                (CURRENT_DATE - cm.created_date::date) as days_open
+            FROM corrective_maintenance cm
+            WHERE cm.status = 'Open'
+            ORDER BY cm.created_date
+        ''')
+
+        open_cms = cursor.fetchall()
+
+        for cm_data in open_cms:
+            cm_number, created_date, technician, equipment, description, priority, days_open = cm_data
+
+            # Format dates - handle both string and datetime objects
+            if created_date:
+                created_str = created_date.strftime('%Y-%m-%d') if hasattr(created_date, 'strftime') else str(created_date)[:10]
+            else:
+                created_str = "Unknown"
+
+            current_date_str = datetime.now().strftime('%Y-%m-%d')
+            tech_name = technician if technician else "Unassigned"
+            equip_str = equipment if equipment else "N/A"
+            desc_str = (description[:60] + "...") if description and len(description) > 60 else (description or "No description")
+            priority_str = priority if priority else "N/A"
+
+            print(f"CM Number: {cm_number}")
+            print(f"  Priority: {priority_str}")
+            print(f"  Equipment: {equip_str}")
+            print(f"  Description: {desc_str}")
+            print(f"  Date Created: {created_str}")
+            print(f"  Days Open: {days_open} days (as of {current_date_str})")
+            print(f"  Technician: {tech_name}")
+
+            # Get MRO stock items used for this CM (if any parts were already consumed during work)
+            cursor.execute('''
+                SELECT
+                    cpu.part_number,
+                    mro.name,
+                    cpu.quantity_used,
+                    mro.unit_price,
+                    cpu.total_cost,
+                    mro.unit_of_measure
+                FROM cm_parts_used cpu
+                LEFT JOIN mro_inventory mro ON cpu.part_number = mro.part_number
+                WHERE cpu.cm_number = %s
+                ORDER BY cpu.recorded_date
+            ''', (cm_number,))
+
+            parts_used = cursor.fetchall()
+
+            if parts_used:
+                print(f"  MRO Stock Items Used (work in progress):")
+                total_cm_cost = 0.0
+                for part_number, name, qty, unit_price, total_cost, uom in parts_used:
+                    part_name = name if name else "Unknown Part"
+                    quantity = qty if qty else 0
+                    price = unit_price if unit_price else 0.0
+                    cost = total_cost if total_cost else (quantity * price)
+                    unit = uom if uom else "EA"
+
+                    print(f"    - Part#: {part_number} | {part_name}")
+                    print(f"      Qty: {quantity} {unit} @ ${price:.2f}/unit = ${cost:.2f}")
+                    total_cm_cost += cost
+
+                print(f"  Total MRO Cost (so far): ${total_cm_cost:.2f}")
+            else:
+                print(f"  MRO Stock Items Used: None recorded yet")
+
+            print("-" * 100)
+            print()
+
+        print("=" * 100)
+        print()
+
     print()
 
     # NEW: Show details of CMs closed from previous months (if any)
@@ -1975,6 +2069,7 @@ def export_professional_monthly_report_pdf(conn, month=None, year=None):
                     cm.assigned_technician,
                     cm.bfm_equipment_no,
                     cm.description,
+                    cm.priority,
                     (cm.completion_date::date - cm.created_date::date) as days_to_close
                 FROM corrective_maintenance cm
                 WHERE EXTRACT(YEAR FROM cm.completion_date::date) = %s
@@ -1986,7 +2081,7 @@ def export_professional_monthly_report_pdf(conn, month=None, year=None):
             closed_cms = cursor.fetchall()
 
             for cm_data in closed_cms:
-                cm_number, created_date, completion_date, technician, equipment, description, days = cm_data
+                cm_number, created_date, completion_date, technician, equipment, description, priority, days = cm_data
 
                 # Format dates - handle both string and datetime objects
                 if created_date:
@@ -2002,6 +2097,7 @@ def export_professional_monthly_report_pdf(conn, month=None, year=None):
                 tech_name = technician if technician else "Unassigned"
                 equip_str = equipment if equipment else "N/A"
                 desc_str = (description[:80] + "...") if description and len(description) > 80 else (description or "No description")
+                priority_str = priority if priority else "N/A"
 
                 # CM Header with key info
                 story.append(Paragraph(
@@ -2011,6 +2107,7 @@ def export_professional_monthly_report_pdf(conn, month=None, year=None):
 
                 # CM Details Table
                 cm_details_data = [
+                    ['Priority:', priority_str],
                     ['Equipment:', equip_str],
                     ['Description:', desc_str],
                     ['Date Created:', created_str],
@@ -2168,6 +2265,168 @@ def export_professional_monthly_report_pdf(conn, month=None, year=None):
         
             story.append(cm_detail_table)
             story.append(Spacer(1, 20))
+
+        # ==================== DETAILED BREAKDOWN: CURRENTLY OPEN CMs ====================
+        if cms_open_current > 0:
+            story.append(Paragraph("DETAILED BREAKDOWN: CURRENTLY OPEN CMs", heading_style))
+            story.append(Spacer(1, 8))
+            story.append(Paragraph(
+                f"<i>Calculation: Days Open = Current Date - Date Created</i>",
+                ParagraphStyle('ItalicStyle', parent=body_style, fontSize=9, textColor=colors.HexColor('#4a5568'))
+            ))
+            story.append(Spacer(1, 12))
+
+            # Query all currently open CMs with their details
+            cursor.execute('''
+                SELECT
+                    cm.cm_number,
+                    cm.created_date,
+                    cm.assigned_technician,
+                    cm.bfm_equipment_no,
+                    cm.description,
+                    cm.priority,
+                    (CURRENT_DATE - cm.created_date::date) as days_open
+                FROM corrective_maintenance cm
+                WHERE cm.status = 'Open'
+                ORDER BY cm.created_date
+            ''')
+
+            open_cms = cursor.fetchall()
+
+            for cm_data in open_cms:
+                cm_number, created_date, technician, equipment, description, priority, days_open = cm_data
+
+                # Format dates - handle both string and datetime objects
+                if created_date:
+                    created_str = created_date.strftime('%Y-%m-%d') if hasattr(created_date, 'strftime') else str(created_date)[:10]
+                else:
+                    created_str = "Unknown"
+
+                current_date_str = datetime.now().strftime('%Y-%m-%d')
+                tech_name = technician if technician else "Unassigned"
+                equip_str = equipment if equipment else "N/A"
+                desc_str = (description[:80] + "...") if description and len(description) > 80 else (description or "No description")
+                priority_str = priority if priority else "N/A"
+
+                # CM Header with key info
+                story.append(Paragraph(
+                    f"<b>CM Number: {cm_number}</b>",
+                    ParagraphStyle('CMHeader', parent=body_style, fontSize=11, textColor=colors.HexColor('#2c5282'), spaceAfter=4)
+                ))
+
+                # CM Details Table
+                cm_details_data = [
+                    ['Priority:', priority_str],
+                    ['Equipment:', equip_str],
+                    ['Description:', desc_str],
+                    ['Date Created:', created_str],
+                    ['Days Open:', f'{days_open} days (as of {current_date_str})'],
+                    ['Technician:', tech_name]
+                ]
+
+                cm_details_table = Table(cm_details_data, colWidths=[1.3*inch, 4.7*inch])
+                cm_details_table.setStyle(TableStyle([
+                    ('ALIGN', (0, 0), (0, -1), 'LEFT'),
+                    ('ALIGN', (1, 0), (1, -1), 'LEFT'),
+                    ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+                    ('FONTNAME', (1, 0), (1, -1), 'Helvetica'),
+                    ('FONTSIZE', (0, 0), (-1, -1), 9),
+                    ('TEXTCOLOR', (0, 0), (-1, -1), colors.HexColor('#2d3748')),
+                    ('LEFTPADDING', (0, 0), (-1, -1), 6),
+                    ('RIGHTPADDING', (0, 0), (-1, -1), 6),
+                    ('TOPPADDING', (0, 0), (-1, -1), 3),
+                    ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+                    ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                ]))
+
+                story.append(cm_details_table)
+                story.append(Spacer(1, 8))
+
+                # Get MRO stock items used for this CM (if any parts were already consumed during work)
+                cursor.execute('''
+                    SELECT
+                        cpu.part_number,
+                        mro.name,
+                        cpu.quantity_used,
+                        mro.unit_price,
+                        cpu.total_cost,
+                        mro.unit_of_measure
+                    FROM cm_parts_used cpu
+                    LEFT JOIN mro_inventory mro ON cpu.part_number = mro.part_number
+                    WHERE cpu.cm_number = %s
+                    ORDER BY cpu.recorded_date
+                ''', (cm_number,))
+
+                parts_used = cursor.fetchall()
+
+                if parts_used:
+                    story.append(Paragraph(
+                        "<b>MRO Stock Items Used (work in progress):</b>",
+                        ParagraphStyle('PartsHeader', parent=body_style, fontSize=9, spaceAfter=4)
+                    ))
+
+                    # Build parts table
+                    parts_table_data = [['Part Number', 'Part Name', 'Qty', 'Unit Price', 'Total Cost']]
+                    total_cm_cost = 0.0
+
+                    for part_number, name, qty, unit_price, total_cost, uom in parts_used:
+                        part_name = name if name else "Unknown Part"
+                        quantity = qty if qty else 0
+                        price = unit_price if unit_price else 0.0
+                        cost = total_cost if total_cost else (quantity * price)
+                        unit = uom if uom else "EA"
+
+                        parts_table_data.append([
+                            part_number,
+                            part_name[:30] + "..." if len(part_name) > 30 else part_name,
+                            f'{quantity} {unit}',
+                            f'${price:.2f}',
+                            f'${cost:.2f}'
+                        ])
+                        total_cm_cost += cost
+
+                    # Add total row
+                    parts_table_data.append(['', '', '', 'Total (so far):', f'${total_cm_cost:.2f}'])
+
+                    parts_table = Table(parts_table_data, colWidths=[1.2*inch, 2.3*inch, 0.8*inch, 0.9*inch, 0.8*inch])
+                    parts_table.setStyle(TableStyle([
+                        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#4a5568')),
+                        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                        ('ALIGN', (0, 0), (1, -1), 'LEFT'),
+                        ('ALIGN', (2, 0), (-1, -1), 'RIGHT'),
+                        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                        ('FONTSIZE', (0, 0), (-1, 0), 8),
+                        ('FONTNAME', (0, 1), (-1, -2), 'Helvetica'),
+                        ('FONTSIZE', (0, 1), (-1, -2), 8),
+                        ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+                        ('FONTSIZE', (0, -1), (-1, -1), 9),
+                        ('BACKGROUND', (0, 1), (-1, -2), colors.white),
+                        ('BACKGROUND', (0, -1), (-1, -1), colors.HexColor('#edf2f7')),
+                        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#cbd5e0')),
+                        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                        ('LEFTPADDING', (0, 0), (-1, -1), 6),
+                        ('RIGHTPADDING', (0, 0), (-1, -1), 6),
+                        ('TOPPADDING', (0, 0), (-1, -1), 5),
+                        ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+                        ('ROWBACKGROUNDS', (0, 1), (-1, -2), [colors.white, colors.HexColor('#f7fafc')])
+                    ]))
+
+                    story.append(parts_table)
+                else:
+                    story.append(Paragraph(
+                        "<b>MRO Stock Items Used:</b> None recorded yet",
+                        ParagraphStyle('NoPartsStyle', parent=body_style, fontSize=9, textColor=colors.HexColor('#718096'))
+                    ))
+
+                # Add separator between CMs
+                story.append(Spacer(1, 8))
+                story.append(Paragraph(
+                    "─" * 100,
+                    ParagraphStyle('Separator', parent=body_style, fontSize=8, textColor=colors.HexColor('#cbd5e0'))
+                ))
+                story.append(Spacer(1, 12))
+
+            story.append(Spacer(1, 10))
 
         # ==================== CM BREAKDOWN BY PRIORITY ====================
         story.append(Paragraph("CM BREAKDOWN BY PRIORITY (Closed This Month)", subheading_style))
