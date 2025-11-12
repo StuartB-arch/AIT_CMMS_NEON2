@@ -16,88 +16,8 @@ from database_utils import db_pool
 
 class MROStockManager:
     """MRO (Maintenance, Repair, Operations) Stock Management"""
-    
-    def clear_all_inventory(self):
-        """Clear ALL MRO stock inventory - add this inside MROStockManager class"""
-        from tkinter import messagebox
-    
-        # Get the main app reference (passed during __init__)
-        # Check how your __init__ stores it - common patterns:
-        main_app = self.parent_app
-        if hasattr(self, 'parent'):
-            main_app = self.parent
-        elif hasattr(self, 'app'):
-            main_app = self.app
-        elif hasattr(self, 'main_app'):
-            main_app = self.main_app
-        elif hasattr(self, 'cmms'):
-            main_app = self.cmms
-    
-        if not main_app:
-            messagebox.showerror("Error", "Cannot access main application")
-            return
-    
-        # Get count
-        cursor = main_app.conn.cursor()
-        cursor.execute('SELECT COUNT(*) FROM mro_inventory')
-        total_count = cursor.fetchone()[0]
-    
-        if total_count == 0:
-            messagebox.showinfo("No Items", "There are no MRO inventory items to clear.")
-            return
-    
-        # Confirmation
-        result = messagebox.askyesno(
-            "⚠️ Confirm Clear All MRO Inventory",
-            f"Are you sure you want to DELETE ALL {total_count} MRO inventory items?\n\n"
-            "⚠️ WARNING: This action cannot be undone!\n"
-            "⚠️ ALL stock records will be permanently deleted!\n\n"
-            "Are you ABSOLUTELY SURE?",
-            icon='warning'
-        )
-    
-        if not result:
-            return
-    
-        # Double confirmation
-        double_check = messagebox.askyesno(
-            "⚠️ Final Confirmation",
-            f"FINAL WARNING!\n\n"
-            f"You are about to permanently delete {total_count} inventory items.\n\n"
-            "This cannot be reversed!\n\n"
-            "Click YES to proceed with deletion.",
-            icon='warning'
-        )
-    
-        if not double_check:
-            messagebox.showinfo("Cancelled", "Clear operation cancelled.")
-            return
-    
-        try:
-            # Delete all
-            cursor.execute('DELETE FROM mro_inventory')
-            main_app.conn.commit()
-            
-            # Refresh display
-            if hasattr(self, 'load_mro_inventory'):
-                self.load_mro_inventory()
-        
-            # Update status
-            if hasattr(main_app, 'update_status'):
-                main_app.update_status(f"✅ Cleared {total_count} MRO items")
-        
-            messagebox.showinfo(
-                "Success", 
-                f"All {total_count} MRO inventory items deleted."
-            )
-        
-        except Exception as e:
-            main_app.conn.rollback()
-            messagebox.showerror("Error", f"Failed to clear: {str(e)}")
-    
-    
-    
-    
+
+
     
     
     
@@ -334,8 +254,6 @@ class MROStockManager:
         ttk.Button(btn_frame2, text="🔄 Migrate Photos to DB",
                   command=self.migrate_photos_to_database, width=20).pack(side='left', padx=5)
 
-        ttk.Button(controls_frame, text="🗑️ CLEAR ALL",
-                  command=lambda: self.clear_all_inventory()).pack(side='right', padx=5)
         # Search and filter frame
         search_frame = ttk.LabelFrame(mro_frame, text="Search & Filter", padding=10)
         search_frame.pack(fill='x', padx=10, pady=5)
@@ -364,8 +282,17 @@ class MROStockManager:
                                     width=15, state='readonly')
         status_combo.pack(side='left', padx=5)
         status_combo.bind('<<ComboboxSelected>>', self.filter_mro_list)
-        
-        ttk.Button(search_frame, text="🔄 Refresh", 
+
+        # Location filter
+        ttk.Label(search_frame, text="Location:").pack(side='left', padx=5)
+        self.mro_location_filter = tk.StringVar(value='All')
+        self.location_combo = ttk.Combobox(search_frame, textvariable=self.mro_location_filter,
+                                           values=['All'],
+                                           width=15, state='readonly')
+        self.location_combo.pack(side='left', padx=5)
+        self.location_combo.bind('<<ComboboxSelected>>', self.filter_mro_list)
+
+        ttk.Button(search_frame, text="🔄 Refresh",
                   command=self.refresh_mro_list).pack(side='left', padx=5)
         
         # Inventory list
@@ -1866,6 +1793,7 @@ class MROStockManager:
     
     def refresh_mro_list(self):
         """Refresh MRO inventory list"""
+        self.update_location_filter()
         self.filter_mro_list()
         self.update_mro_statistics()
     
@@ -1874,6 +1802,7 @@ class MROStockManager:
         search_term = self.mro_search_var.get().lower()
         system_filter = self.mro_system_filter.get()
         status_filter = self.mro_status_filter.get()
+        location_filter = self.mro_location_filter.get()
 
         # Clear existing items
         for item in self.mro_tree.get_children():
@@ -1898,6 +1827,11 @@ class MROStockManager:
             # OPTIMIZED: Uses functional index on LOWER(status)
             query += ' AND LOWER(status) = LOWER(%s)'
             params.append(status_filter)
+
+        # Location filter
+        if location_filter != 'All':
+            query += ' AND LOWER(location) = LOWER(%s)'
+            params.append(location_filter)
 
         if search_term:
             # OPTIMIZED: LOWER() functions now use functional indexes
@@ -1954,7 +1888,31 @@ class MROStockManager:
 
         # Color low stock items
         self.mro_tree.tag_configure('low_stock', background='#ffcccc')
-    
+
+    def update_location_filter(self):
+        """Update location filter dropdown with unique locations from database"""
+        try:
+            with db_pool.get_cursor(commit=False) as cursor:
+                cursor.execute('''
+                    SELECT DISTINCT location
+                    FROM mro_inventory
+                    WHERE location IS NOT NULL AND location != ''
+                    ORDER BY location
+                ''')
+
+                locations = ['All'] + [row['location'] for row in cursor.fetchall()]
+
+                # Update combobox values
+                if hasattr(self, 'location_combo'):
+                    current_value = self.mro_location_filter.get()
+                    self.location_combo['values'] = locations
+
+                    # Preserve current selection if it still exists
+                    if current_value not in locations:
+                        self.mro_location_filter.set('All')
+        except Exception as e:
+            print(f"Error updating location filter: {e}")
+
     def update_mro_statistics(self):
         """Update inventory statistics - OPTIMIZED to use single query"""
         with db_pool.get_cursor(commit=False) as cursor:
