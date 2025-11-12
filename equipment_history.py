@@ -105,21 +105,21 @@ class EquipmentHistory:
         cursor = self.conn.cursor()
 
         query = '''
-            SELECT cm_number, date_opened, date_closed, description, priority,
-                   status, assigned_to, labor_hours, root_cause, corrective_action
+            SELECT cm_number, reported_date, closed_date, description, priority,
+                   status, assigned_technician, labor_hours, notes, notes
             FROM corrective_maintenance
             WHERE bfm_equipment_no = %s
         '''
         params = [bfm_no]
 
         if start_date:
-            query += ' AND date_opened >= %s'
+            query += ' AND reported_date >= %s'
             params.append(start_date)
         if end_date:
-            query += ' AND date_opened <= %s'
+            query += ' AND reported_date <= %s'
             params.append(end_date)
 
-        query += ' ORDER BY date_opened DESC'
+        query += ' ORDER BY reported_date DESC'
 
         cursor.execute(query, params)
 
@@ -357,7 +357,7 @@ class EquipmentHistory:
             SELECT COUNT(*)
             FROM corrective_maintenance
             WHERE bfm_equipment_no = %s
-            AND date_opened >= %s
+            AND reported_date >= %s
         ''', (bfm_no, one_year_ago))
         cm_count = cursor.fetchone()[0]
         metrics['cm_frequency'] = round(cm_count / 12, 1)
@@ -375,7 +375,7 @@ class EquipmentHistory:
             SELECT COALESCE(SUM(labor_hours), 0)
             FROM corrective_maintenance
             WHERE bfm_equipment_no = %s
-            AND date_opened >= %s
+            AND reported_date >= %s
         ''', (bfm_no, one_year_ago))
         cm_hours = cursor.fetchone()[0] or 0
 
@@ -471,8 +471,8 @@ class EquipmentHistory:
                 SELECT COUNT(*)
                 FROM corrective_maintenance
                 WHERE bfm_equipment_no = %s
-                AND date_opened >= %s
-                AND date_opened < %s
+                AND reported_date >= %s
+                AND reported_date < %s
             ''', (bfm_no, month_start, month_end))
             trends['monthly_cm_counts'].append(cursor.fetchone()[0])
 
@@ -490,8 +490,8 @@ class EquipmentHistory:
                 SELECT COALESCE(SUM(labor_hours), 0)
                 FROM corrective_maintenance
                 WHERE bfm_equipment_no = %s
-                AND date_opened >= %s
-                AND date_opened < %s
+                AND reported_date >= %s
+                AND reported_date < %s
             ''', (bfm_no, month_start, month_end))
             cm_hours = cursor.fetchone()[0] or 0
 

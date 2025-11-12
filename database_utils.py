@@ -33,7 +33,7 @@ class DatabaseConnectionPool:
             self.config = None
             self.keepalive_thread = None
             self.keepalive_stop = threading.Event()
-            self.keepalive_interval = 240  # 4 minutes (less than NEON's 5-minute timeout)
+            self.keepalive_interval = 120  # 2 minutes (more aggressive to prevent NEON timeouts)
 
     def initialize(self, db_config, min_conn=2, max_conn=10):
         """
@@ -55,46 +55,63 @@ class DatabaseConnectionPool:
                 user=db_config['user'],
                 password=db_config['password'],
                 sslmode=db_config.get('sslmode', 'require'),
-                # TCP Keepalive settings to prevent connection timeouts
+                # TCP Keepalive settings to prevent connection timeouts (AGGRESSIVE for NEON)
                 keepalives=1,              # Enable TCP keepalive
-                keepalives_idle=30,        # Start keepalive after 30 seconds of idle
-                keepalives_interval=10,    # Send keepalive every 10 seconds
-                keepalives_count=5,        # Close connection after 5 failed keepalives
+                keepalives_idle=10,        # Start keepalive after 10 seconds of idle (more aggressive)
+                keepalives_interval=5,     # Send keepalive every 5 seconds (more frequent)
+                keepalives_count=3,        # Close connection after 3 failed keepalives
                 # Connection timeout settings
-                connect_timeout=10         # 10 second connection timeout
+                connect_timeout=10,        # 10 second connection timeout
+                # Application-level keepalive for NEON
+                options='-c statement_timeout=0'  # No statement timeout
             )
             print(f"Connection pool initialized: {min_conn}-{max_conn} connections with keepalive enabled")
 
             # Start keepalive thread to prevent NEON free tier from suspending
             self._start_keepalive_thread()
 
-    def get_connection(self):
-        """Get a connection from the pool with validation"""
+    def get_connection(self, max_retries=3):
+        """Get a connection from the pool with validation and retry logic"""
         if self.pool is None:
             raise Exception("Connection pool not initialized. Call initialize() first.")
 
-        conn = self.pool.getconn()
-
-        # Validate connection is still alive before returning it
-        try:
-            # Quick test query to check if connection is valid
-            cursor = conn.cursor()
-            cursor.execute("SELECT 1")
-            cursor.fetchone()
-            cursor.close()
-            # End the transaction created by SELECT query
-            conn.commit()
-        except (psycopg2.OperationalError, psycopg2.InterfaceError) as e:
-            # Connection is dead, close it and get a new one
-            print(f"Connection validation failed: {e}. Getting new connection...")
+        last_error = None
+        for attempt in range(max_retries):
             try:
-                conn.close()
-            except:
-                pass
-            # Get a fresh connection
-            conn = self.pool.getconn()
+                conn = self.pool.getconn()
 
-        return conn
+                # Validate connection is still alive before returning it
+                try:
+                    # Quick test query to check if connection is valid
+                    cursor = conn.cursor()
+                    cursor.execute("SELECT 1")
+                    cursor.fetchone()
+                    cursor.close()
+                    # End the transaction created by SELECT query
+                    conn.commit()
+                    return conn
+                except (psycopg2.OperationalError, psycopg2.InterfaceError) as e:
+                    # Connection is dead, close it and get a new one
+                    print(f"Connection validation failed (attempt {attempt + 1}/{max_retries}): {e}")
+                    try:
+                        conn.close()
+                    except:
+                        pass
+                    last_error = e
+
+                    # Wait before retry with exponential backoff
+                    if attempt < max_retries - 1:
+                        wait_time = 0.5 * (2 ** attempt)  # 0.5s, 1s, 2s
+                        time.sleep(wait_time)
+
+            except Exception as e:
+                print(f"Error getting connection (attempt {attempt + 1}/{max_retries}): {e}")
+                last_error = e
+                if attempt < max_retries - 1:
+                    wait_time = 0.5 * (2 ** attempt)
+                    time.sleep(wait_time)
+
+        raise Exception(f"Failed to get valid database connection after {max_retries} attempts: {last_error}")
 
     def return_connection(self, conn):
         """Return a connection to the pool"""
@@ -111,13 +128,22 @@ class DatabaseConnectionPool:
                 break
 
             # Send a simple query to keep the connection alive
-            try:
-                with self.get_cursor(commit=False) as cursor:
-                    cursor.execute("SELECT 1")
-                    cursor.fetchone()
-                print("Keepalive ping sent to database")
-            except Exception as e:
-                print(f"Keepalive ping failed (will retry): {e}")
+            retry_count = 0
+            max_retries = 3
+            while retry_count < max_retries:
+                try:
+                    with self.get_cursor(commit=False) as cursor:
+                        cursor.execute("SELECT 1")
+                        cursor.fetchone()
+                    print(f"✓ Keepalive ping sent to database (interval: {self.keepalive_interval}s)")
+                    break  # Success, exit retry loop
+                except Exception as e:
+                    retry_count += 1
+                    if retry_count < max_retries:
+                        print(f"⚠ Keepalive ping failed (attempt {retry_count}/{max_retries}): {e}. Retrying in 5s...")
+                        time.sleep(5)
+                    else:
+                        print(f"✗ Keepalive ping failed after {max_retries} attempts: {e}. Will retry at next interval.")
 
         print("Keepalive thread stopped")
 
