@@ -17741,6 +17741,12 @@ OVERDUE MONTHLY PMs: {len(attention['overdue_monthly'])}
                 messagebox.showerror("Error", "Equipment manager not initialized")
                 return
 
+            # Ensure connection is in clean state
+            try:
+                self.conn.rollback()
+            except:
+                pass
+
             # Ask for BFM number
             from tkinter import simpledialog
             bfm_no = simpledialog.askstring(
@@ -17751,20 +17757,39 @@ OVERDUE MONTHLY PMs: {len(attention['overdue_monthly'])}
 
             if bfm_no:
                 # Validate BFM exists
-                if self.equipment_manager.validate_bfm_number(bfm_no):
-                    show_equipment_history(self.root, self.conn, str(bfm_no))
-                else:
-                    messagebox.showerror("Not Found",
-                        f"Equipment '{bfm_no}' not found in database.\n\n"
-                        "Please check the BFM number and try again.")
+                try:
+                    if self.equipment_manager.validate_bfm_number(bfm_no):
+                        show_equipment_history(self.root, self.conn, str(bfm_no))
+                    else:
+                        messagebox.showerror("Not Found",
+                            f"Equipment '{bfm_no}' not found in database.\n\n"
+                            "Please check the BFM number and try again.")
+                except Exception as e:
+                    # Rollback on any error
+                    try:
+                        self.conn.rollback()
+                    except:
+                        pass
+                    raise e
 
         except Exception as e:
             messagebox.showerror("Error", f"Error opening equipment history: {str(e)}")
             print(f"Equipment history error: {e}")
+            # Ensure clean state for next operation
+            try:
+                self.conn.rollback()
+            except:
+                pass
 
     def auto_collect_kpis_dialog(self):
         """Auto-collect KPIs for selected period"""
         try:
+            # Ensure connection is in clean state
+            try:
+                self.conn.rollback()
+            except:
+                pass
+
             # Check role
             if self.current_user_role != 'Manager':
                 messagebox.showerror("Access Denied",
