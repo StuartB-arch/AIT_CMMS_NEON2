@@ -427,6 +427,7 @@ Data Sources:
                         print(f"DEBUG: {tech_name} - PM Count: {pm_count}, PM Hours: {pm_hours}")
 
                     # Get CM hours and count
+                    # Note: closed_date is TEXT, need to handle comparison carefully
                     cursor.execute("""
                         SELECT
                             COUNT(*) as cm_count,
@@ -434,6 +435,8 @@ Data Sources:
                         FROM corrective_maintenance
                         WHERE assigned_technician = %s
                         AND status = 'Closed'
+                        AND closed_date IS NOT NULL
+                        AND closed_date != ''
                         AND closed_date >= %s
                         AND closed_date <= %s
                     """, (tech_name, start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d')))
@@ -442,9 +445,8 @@ Data Sources:
                     cm_hours = float(cm_result['cm_hours']) if cm_result else 0.0
                     cm_count = int(cm_result['cm_count']) if cm_result else 0
 
-                    # Debug output
-                    if cm_count > 0:
-                        print(f"DEBUG: {tech_name} - CM Count: {cm_count}, CM Hours: {cm_hours}")
+                    # Debug output - show all techs to see who has/doesn't have CM data
+                    print(f"DEBUG CM: {tech_name} - CM Count: {cm_count}, CM Hours: {cm_hours}")
 
                     total_hours = pm_hours + cm_hours
 
@@ -459,6 +461,17 @@ Data Sources:
 
                 print(f"DEBUG: Date range: {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}")
                 print(f"DEBUG: Found {len(tech_data)} technicians")
+
+                # Debug: Check total CM records in database
+                cursor.execute("""
+                    SELECT COUNT(*) as total_cms,
+                           COUNT(CASE WHEN status = 'Closed' THEN 1 END) as closed_cms,
+                           COUNT(CASE WHEN status = 'Closed' AND closed_date IS NOT NULL AND closed_date != '' THEN 1 END) as closed_with_date
+                    FROM corrective_maintenance
+                """)
+                cm_stats = cursor.fetchone()
+                print(f"DEBUG: Total CMs in database: {cm_stats['total_cms']}, Closed: {cm_stats['closed_cms']}, Closed with date: {cm_stats['closed_with_date']}")
+
                 return tech_data
 
         except Exception as e:

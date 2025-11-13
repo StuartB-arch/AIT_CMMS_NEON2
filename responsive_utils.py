@@ -214,24 +214,20 @@ def calculate_chart_size_for_multi_chart_layout(screen_width: int,
     Returns:
         Tuple of (width_inches, height_inches)
     """
-    # For 4 charts in a tabbed notebook with scrollable frame
-    # We need much smaller sizes since they're in a constrained container
+    # For 4 charts in notebook tabs - use fixed small sizes that fit well
+    # Charts are in scrollable notebook tabs, so we want them compact
     if num_charts == 4:
-        # Reduced from 40% to 25% for better fit in notebook tabs
-        width_inches = (screen_width * 0.25) / dpi
-        height_inches = (screen_height * 0.25) / dpi
+        # Fixed size for 4-chart layout in notebook tabs
+        width_inches = 6.0
+        height_inches = 3.5
     # For 2 charts side by side
     elif num_charts == 2:
-        width_inches = (screen_width * 0.35) / dpi
-        height_inches = (screen_height * 0.35) / dpi
+        width_inches = 7.0
+        height_inches = 4.5
     # Single chart
     else:
-        width_inches = (screen_width * 0.50) / dpi
-        height_inches = (screen_height * 0.45) / dpi
-
-    # Apply constraints - smaller max sizes for notebook tabs
-    width_inches = max(4.0, min(6.5, width_inches))
-    height_inches = max(3.0, min(4.5, height_inches))
+        width_inches = 9.0
+        height_inches = 5.5
 
     return (width_inches, height_inches)
 
