@@ -276,8 +276,8 @@ Data Sources:
         notes_label = ttk.Label(notes_frame, text=notes_text.strip(), justify='left', font=('Arial', 9))
         notes_label.pack(anchor='w')
 
-        # Auto-generate report on tab creation
-        self.efficiency_frame.after(500, self.generate_report)
+        # Auto-generate report on tab creation (silently)
+        self.efficiency_frame.after(500, lambda: self.generate_report(silent=True))
 
     def _create_summary_metric(self, parent, label_text: str, key: str, column: int):
         """Create a summary metric display"""
@@ -334,7 +334,7 @@ Data Sources:
         self.start_date_var.set(year_start.strftime('%Y-%m-%d'))
         self.end_date_var.set(today.strftime('%Y-%m-%d'))
 
-    def generate_report(self):
+    def generate_report(self, silent=False):
         """Generate the efficiency report with all calculations and visualizations"""
         try:
             # Validate dates
@@ -342,14 +342,16 @@ Data Sources:
             end_date = datetime.strptime(self.end_date_var.get(), '%Y-%m-%d')
 
             if start_date > end_date:
-                messagebox.showerror("Error", "Start date must be before end date")
+                if not silent:
+                    messagebox.showerror("Error", "Start date must be before end date")
                 return
 
             # Fetch data from database
             tech_data = self._fetch_technician_data(start_date, end_date)
 
             if not tech_data:
-                messagebox.showwarning("No Data", "No efficiency data found for the selected date range")
+                if not silent:
+                    messagebox.showwarning("No Data", "No efficiency data found for the selected date range")
                 return
 
             # Calculate metrics
@@ -361,12 +363,15 @@ Data Sources:
             # Generate visualizations
             self._generate_visualizations(tech_data)
 
-            messagebox.showinfo("Success", "Efficiency report generated successfully")
+            if not silent:
+                messagebox.showinfo("Success", "Efficiency report generated successfully")
 
         except ValueError as e:
-            messagebox.showerror("Error", f"Invalid date format. Use YYYY-MM-DD: {str(e)}")
+            if not silent:
+                messagebox.showerror("Error", f"Invalid date format. Use YYYY-MM-DD: {str(e)}")
         except Exception as e:
-            messagebox.showerror("Error", f"Failed to generate report:\n{str(e)}")
+            if not silent:
+                messagebox.showerror("Error", f"Failed to generate report:\n{str(e)}")
             import traceback
             print(traceback.format_exc())
 
@@ -411,6 +416,8 @@ Data Sources:
                         print(f"DEBUG: {tech_name} - PM Count: {pm_count}, PM Hours: {pm_hours}")
 
                     # Get CM hours and count
+                    # Note: Some CMs may not have closed_date even if status is 'Closed'
+                    # So we check if closed_date is NULL or within range
                     cursor.execute("""
                         SELECT
                             COUNT(*) as cm_count,
@@ -418,8 +425,10 @@ Data Sources:
                         FROM corrective_maintenance
                         WHERE assigned_technician = %s
                         AND status = 'Closed'
-                        AND closed_date >= %s
-                        AND closed_date <= %s
+                        AND (
+                            closed_date IS NULL
+                            OR (closed_date >= %s AND closed_date <= %s)
+                        )
                     """, (tech_name, start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d')))
 
                     cm_result = cursor.fetchone()
@@ -427,8 +436,7 @@ Data Sources:
                     cm_count = int(cm_result['cm_count']) if cm_result else 0
 
                     # Debug output
-                    if cm_count > 0:
-                        print(f"DEBUG: {tech_name} - CM Count: {cm_count}, CM Hours: {cm_hours}")
+                    print(f"DEBUG: {tech_name} - CM Count: {cm_count}, CM Hours: {cm_hours}")
 
                     total_hours = pm_hours + cm_hours
 
@@ -536,8 +544,19 @@ Data Sources:
         """Generate all chart visualizations"""
         # Clear existing charts
         for widget in self.canvas_widgets:
-            widget.destroy()
+            try:
+                widget.destroy()
+            except:
+                pass
         self.canvas_widgets.clear()
+
+        # Also clear all children in chart frames to be safe
+        for frame_key, frame in self.chart_frames.items():
+            for child in frame.winfo_children():
+                try:
+                    child.destroy()
+                except:
+                    pass
 
         # Generate each chart
         self._create_efficiency_comparison_chart(tech_data)
@@ -552,7 +571,7 @@ Data Sources:
         # Sort by efficiency
         sorted_data = sorted(tech_data, key=lambda x: x['efficiency'], reverse=True)
 
-        fig = Figure(figsize=(8, 4.5), dpi=100)
+        fig = Figure(figsize=(6, 3.5), dpi=80)
         ax = fig.add_subplot(111)
 
         technicians = [t['technician'] for t in sorted_data]
@@ -578,16 +597,16 @@ Data Sources:
             height = bar.get_height()
             ax.text(bar.get_x() + bar.get_width()/2., height,
                    f'{height:.1f}%',
-                   ha='center', va='bottom', fontsize=9, fontweight='bold')
+                   ha='center', va='bottom', fontsize=7, fontweight='bold')
 
-        ax.set_xlabel('Technician', fontsize=12, fontweight='bold')
-        ax.set_ylabel('Efficiency (%)', fontsize=12, fontweight='bold')
-        ax.set_title('Technician Efficiency Comparison', fontsize=14, fontweight='bold')
-        ax.legend()
+        ax.set_xlabel('Technician', fontsize=9, fontweight='bold')
+        ax.set_ylabel('Efficiency (%)', fontsize=9, fontweight='bold')
+        ax.set_title('Technician Efficiency Comparison', fontsize=10, fontweight='bold')
+        ax.legend(fontsize=8)
         ax.grid(axis='y', alpha=0.3)
 
         # Rotate x labels if needed
-        plt.setp(ax.xaxis.get_majorticklabels(), rotation=45, ha='right')
+        plt.setp(ax.xaxis.get_majorticklabels(), rotation=45, ha='right', fontsize=8)
         fig.tight_layout()
 
         # Embed in tkinter
@@ -603,7 +622,7 @@ Data Sources:
         # Sort by total hours
         sorted_data = sorted(tech_data, key=lambda x: x['total_hours'], reverse=True)
 
-        fig = Figure(figsize=(8, 4.5), dpi=100)
+        fig = Figure(figsize=(6, 3.5), dpi=80)
         ax = fig.add_subplot(111)
 
         technicians = [t['technician'] for t in sorted_data]
@@ -620,14 +639,14 @@ Data Sources:
         # Add total labels
         for i, (pm, cm) in enumerate(zip(pm_hours, cm_hours)):
             total = pm + cm
-            ax.text(i, total, f'{total:.1f}', ha='center', va='bottom', fontsize=9, fontweight='bold')
+            ax.text(i, total, f'{total:.1f}', ha='center', va='bottom', fontsize=7, fontweight='bold')
 
-        ax.set_xlabel('Technician', fontsize=12, fontweight='bold')
-        ax.set_ylabel('Hours', fontsize=12, fontweight='bold')
-        ax.set_title('Work Hours Breakdown: PM vs CM', fontsize=14, fontweight='bold')
+        ax.set_xlabel('Technician', fontsize=9, fontweight='bold')
+        ax.set_ylabel('Hours', fontsize=9, fontweight='bold')
+        ax.set_title('Work Hours Breakdown: PM vs CM', fontsize=10, fontweight='bold')
         ax.set_xticks(x)
-        ax.set_xticklabels(technicians, rotation=45, ha='right')
-        ax.legend()
+        ax.set_xticklabels(technicians, rotation=45, ha='right', fontsize=8)
+        ax.legend(fontsize=8)
         ax.grid(axis='y', alpha=0.3)
 
         fig.tight_layout()
@@ -641,7 +660,7 @@ Data Sources:
         """Create pie chart showing workload distribution"""
         frame = self.chart_frames['workload_distribution']
 
-        fig = Figure(figsize=(8, 4.5), dpi=100)
+        fig = Figure(figsize=(6, 3.5), dpi=80)
 
         # Create two subplots - one for hours, one for task count
         ax1 = fig.add_subplot(121)
@@ -652,16 +671,16 @@ Data Sources:
         total_hours = [t['total_hours'] for t in tech_data if t['total_hours'] > 0]
 
         if total_hours:
-            ax1.pie(total_hours, labels=technicians, autopct='%1.1f%%', startangle=90)
-            ax1.set_title('Total Hours Distribution', fontsize=12, fontweight='bold')
+            ax1.pie(total_hours, labels=technicians, autopct='%1.1f%%', startangle=90, textprops={'fontsize': 7})
+            ax1.set_title('Total Hours Distribution', fontsize=10, fontweight='bold')
 
         # Task count distribution
         task_counts = [t['pm_count'] + t['cm_count'] for t in tech_data if (t['pm_count'] + t['cm_count']) > 0]
         tech_names = [t['technician'] for t in tech_data if (t['pm_count'] + t['cm_count']) > 0]
 
         if task_counts:
-            ax2.pie(task_counts, labels=tech_names, autopct='%1.1f%%', startangle=90)
-            ax2.set_title('Task Count Distribution', fontsize=12, fontweight='bold')
+            ax2.pie(task_counts, labels=tech_names, autopct='%1.1f%%', startangle=90, textprops={'fontsize': 7})
+            ax2.set_title('Task Count Distribution', fontsize=10, fontweight='bold')
 
         fig.tight_layout()
 
@@ -674,7 +693,7 @@ Data Sources:
         """Create chart showing efficiency vs target"""
         frame = self.chart_frames['trend_analysis']
 
-        fig = Figure(figsize=(8, 4.5), dpi=100)
+        fig = Figure(figsize=(6, 3.5), dpi=80)
         ax = fig.add_subplot(111)
 
         # Sort by technician name for consistent display
@@ -685,22 +704,22 @@ Data Sources:
         x = range(len(technicians))
 
         # Plot efficiency line
-        ax.plot(x, efficiencies, marker='o', linewidth=2, markersize=8, label='Actual Efficiency', color='#007bff')
+        ax.plot(x, efficiencies, marker='o', linewidth=1.5, markersize=6, label='Actual Efficiency', color='#007bff')
 
         # Plot target line
         target_line = [self.TARGET_EFFICIENCY * 100] * len(technicians)
-        ax.plot(x, target_line, linestyle='--', linewidth=2, label=f'Target ({self.TARGET_EFFICIENCY * 100}%)', color='red')
+        ax.plot(x, target_line, linestyle='--', linewidth=1.5, label=f'Target ({self.TARGET_EFFICIENCY * 100}%)', color='red')
 
         # Fill area between efficiency and target
         ax.fill_between(x, efficiencies, target_line, alpha=0.2, color='green', where=[e >= t for e, t in zip(efficiencies, target_line)])
         ax.fill_between(x, efficiencies, target_line, alpha=0.2, color='red', where=[e < t for e, t in zip(efficiencies, target_line)])
 
-        ax.set_xlabel('Technician', fontsize=12, fontweight='bold')
-        ax.set_ylabel('Efficiency (%)', fontsize=12, fontweight='bold')
-        ax.set_title('Efficiency vs Target Analysis', fontsize=14, fontweight='bold')
+        ax.set_xlabel('Technician', fontsize=9, fontweight='bold')
+        ax.set_ylabel('Efficiency (%)', fontsize=9, fontweight='bold')
+        ax.set_title('Efficiency vs Target Analysis', fontsize=10, fontweight='bold')
         ax.set_xticks(x)
-        ax.set_xticklabels(technicians, rotation=45, ha='right')
-        ax.legend()
+        ax.set_xticklabels(technicians, rotation=45, ha='right', fontsize=8)
+        ax.legend(fontsize=8)
         ax.grid(True, alpha=0.3)
 
         fig.tight_layout()
