@@ -48,11 +48,16 @@ class EfficiencyManager:
         self.user_name = user_name
         self.efficiency_frame = None
         self.canvas_widgets = []  # Store canvas widgets for cleanup
+        self.screen_width = None  # Cache screen dimensions
+        self.screen_height = None
 
     def create_efficiency_tab(self):
         """Create the main Efficiency Tracking tab"""
         self.efficiency_frame = ttk.Frame(self.notebook)
         self.notebook.add(self.efficiency_frame, text="⚡ Efficiency")
+
+        # Initialize screen dimensions once
+        self._init_screen_dimensions()
 
         # Main container with scrollbar
         main_container = ttk.Frame(self.efficiency_frame)
@@ -294,6 +299,24 @@ Data Sources:
 
         # Don't auto-generate report - let user click "Generate Report" button when ready
         # self.efficiency_frame.after(500, self.generate_report)
+
+    def _init_screen_dimensions(self):
+        """Initialize and cache screen dimensions"""
+        try:
+            # Get from the main notebook widget which should be properly initialized
+            self.screen_width = self.notebook.winfo_screenwidth()
+            self.screen_height = self.notebook.winfo_screenheight()
+
+            # Fallback if we get invalid dimensions
+            if self.screen_width <= 1 or self.screen_height <= 1:
+                self.screen_width = 1920  # Default to common resolution
+                self.screen_height = 1080
+
+            print(f"DEBUG: Screen dimensions: {self.screen_width}x{self.screen_height}")
+        except Exception as e:
+            print(f"Warning: Could not get screen dimensions, using defaults: {e}")
+            self.screen_width = 1920
+            self.screen_height = 1080
 
     def _create_summary_metric(self, parent, label_text: str, key: str, column: int):
         """Create a summary metric display"""
@@ -582,9 +605,10 @@ Data Sources:
         sorted_data = sorted(tech_data, key=lambda x: x['efficiency'], reverse=True)
 
         # Get responsive chart size for multi-chart layout (4 charts total)
-        screen_width = frame.winfo_screenwidth()
-        screen_height = frame.winfo_screenheight()
-        figsize = calculate_chart_size_for_multi_chart_layout(screen_width, screen_height, num_charts=4)
+        # Use cached screen dimensions
+        figsize = calculate_chart_size_for_multi_chart_layout(
+            self.screen_width, self.screen_height, num_charts=4
+        )
 
         fig = Figure(figsize=figsize, dpi=100)
         ax = fig.add_subplot(111)
@@ -621,14 +645,20 @@ Data Sources:
         ax.grid(axis='y', alpha=0.3)
 
         # Rotate x labels if needed
-        plt.setp(ax.xaxis.get_majorticklabels(), rotation=45, ha='right')
+        for label in ax.get_xticklabels():
+            label.set_rotation(45)
+            label.set_ha('right')
         fig.tight_layout()
 
         # Embed in tkinter
         canvas = FigureCanvasTkAgg(fig, master=frame)
         canvas.draw()
-        canvas.get_tk_widget().pack(fill='both', expand=True)
-        self.canvas_widgets.append(canvas.get_tk_widget())
+        canvas_widget = canvas.get_tk_widget()
+        canvas_widget.pack(fill='both', expand=True)
+        self.canvas_widgets.append(canvas_widget)
+
+        # Force canvas update
+        canvas_widget.update_idletasks()
 
     def _create_hours_breakdown_chart(self, tech_data: List[Dict]):
         """Create stacked bar chart showing PM vs CM hours"""
@@ -638,9 +668,10 @@ Data Sources:
         sorted_data = sorted(tech_data, key=lambda x: x['total_hours'], reverse=True)
 
         # Get responsive chart size for multi-chart layout (4 charts total)
-        screen_width = frame.winfo_screenwidth()
-        screen_height = frame.winfo_screenheight()
-        figsize = calculate_chart_size_for_multi_chart_layout(screen_width, screen_height, num_charts=4)
+        # Use cached screen dimensions
+        figsize = calculate_chart_size_for_multi_chart_layout(
+            self.screen_width, self.screen_height, num_charts=4
+        )
 
         fig = Figure(figsize=figsize, dpi=100)
         ax = fig.add_subplot(111)
@@ -673,17 +704,22 @@ Data Sources:
 
         canvas = FigureCanvasTkAgg(fig, master=frame)
         canvas.draw()
-        canvas.get_tk_widget().pack(fill='both', expand=True)
-        self.canvas_widgets.append(canvas.get_tk_widget())
+        canvas_widget = canvas.get_tk_widget()
+        canvas_widget.pack(fill='both', expand=True)
+        self.canvas_widgets.append(canvas_widget)
+
+        # Force canvas update
+        canvas_widget.update_idletasks()
 
     def _create_workload_distribution_chart(self, tech_data: List[Dict]):
         """Create pie chart showing workload distribution"""
         frame = self.chart_frames['workload_distribution']
 
         # Get responsive chart size for multi-chart layout (4 charts total)
-        screen_width = frame.winfo_screenwidth()
-        screen_height = frame.winfo_screenheight()
-        figsize = calculate_chart_size_for_multi_chart_layout(screen_width, screen_height, num_charts=4)
+        # Use cached screen dimensions
+        figsize = calculate_chart_size_for_multi_chart_layout(
+            self.screen_width, self.screen_height, num_charts=4
+        )
 
         fig = Figure(figsize=figsize, dpi=100)
 
@@ -711,17 +747,22 @@ Data Sources:
 
         canvas = FigureCanvasTkAgg(fig, master=frame)
         canvas.draw()
-        canvas.get_tk_widget().pack(fill='both', expand=True)
-        self.canvas_widgets.append(canvas.get_tk_widget())
+        canvas_widget = canvas.get_tk_widget()
+        canvas_widget.pack(fill='both', expand=True)
+        self.canvas_widgets.append(canvas_widget)
+
+        # Force canvas update
+        canvas_widget.update_idletasks()
 
     def _create_trend_chart(self, tech_data: List[Dict]):
         """Create chart showing efficiency vs target"""
         frame = self.chart_frames['trend_analysis']
 
         # Get responsive chart size for multi-chart layout (4 charts total)
-        screen_width = frame.winfo_screenwidth()
-        screen_height = frame.winfo_screenheight()
-        figsize = calculate_chart_size_for_multi_chart_layout(screen_width, screen_height, num_charts=4)
+        # Use cached screen dimensions
+        figsize = calculate_chart_size_for_multi_chart_layout(
+            self.screen_width, self.screen_height, num_charts=4
+        )
 
         fig = Figure(figsize=figsize, dpi=100)
         ax = fig.add_subplot(111)
@@ -756,8 +797,12 @@ Data Sources:
 
         canvas = FigureCanvasTkAgg(fig, master=frame)
         canvas.draw()
-        canvas.get_tk_widget().pack(fill='both', expand=True)
-        self.canvas_widgets.append(canvas.get_tk_widget())
+        canvas_widget = canvas.get_tk_widget()
+        canvas_widget.pack(fill='both', expand=True)
+        self.canvas_widgets.append(canvas_widget)
+
+        # Force canvas update
+        canvas_widget.update_idletasks()
 
     def print_report(self):
         """Print the current efficiency report"""
