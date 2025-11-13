@@ -292,8 +292,8 @@ Data Sources:
         notes_label = ttk.Label(notes_frame, text=notes_text.strip(), justify='left', font=('Arial', 9))
         notes_label.pack(anchor='w')
 
-        # Auto-generate report on tab creation
-        self.efficiency_frame.after(500, self.generate_report)
+        # Don't auto-generate report - let user click "Generate Report" button when ready
+        # self.efficiency_frame.after(500, self.generate_report)
 
     def _create_summary_metric(self, parent, label_text: str, key: str, column: int):
         """Create a summary metric display"""

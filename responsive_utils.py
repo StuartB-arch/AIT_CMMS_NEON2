@@ -203,7 +203,7 @@ def calculate_chart_size_for_multi_chart_layout(screen_width: int,
                                                num_charts: int = 4,
                                                dpi: int = 100) -> Tuple[float, float]:
     """
-    Calculate chart size optimized for layouts with multiple charts
+    Calculate chart size optimized for layouts with multiple charts inside a notebook tab
 
     Args:
         screen_width: Screen width in pixels
@@ -214,23 +214,24 @@ def calculate_chart_size_for_multi_chart_layout(screen_width: int,
     Returns:
         Tuple of (width_inches, height_inches)
     """
-    # For 2x2 grid layout (4 charts)
+    # For 4 charts in a tabbed notebook with scrollable frame
+    # We need much smaller sizes since they're in a constrained container
     if num_charts == 4:
-        # Use ~40% of width and ~35% of height for each chart
-        width_inches = (screen_width * 0.40) / dpi
-        height_inches = (screen_height * 0.35) / dpi
+        # Reduced from 40% to 25% for better fit in notebook tabs
+        width_inches = (screen_width * 0.25) / dpi
+        height_inches = (screen_height * 0.25) / dpi
     # For 2 charts side by side
     elif num_charts == 2:
-        width_inches = (screen_width * 0.45) / dpi
-        height_inches = (screen_height * 0.50) / dpi
+        width_inches = (screen_width * 0.35) / dpi
+        height_inches = (screen_height * 0.35) / dpi
     # Single chart
     else:
-        width_inches = (screen_width * 0.70) / dpi
-        height_inches = (screen_height * 0.60) / dpi
+        width_inches = (screen_width * 0.50) / dpi
+        height_inches = (screen_height * 0.45) / dpi
 
-    # Apply constraints
-    width_inches = max(4.0, min(8.0, width_inches))
-    height_inches = max(3.0, min(6.0, height_inches))
+    # Apply constraints - smaller max sizes for notebook tabs
+    width_inches = max(4.0, min(6.5, width_inches))
+    height_inches = max(3.0, min(4.5, height_inches))
 
     return (width_inches, height_inches)
 
