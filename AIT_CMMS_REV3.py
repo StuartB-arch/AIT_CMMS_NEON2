@@ -6,6 +6,7 @@ Fully functional CMMS with automatic PM scheduling, technician assignment, and c
 from datetime import datetime, timedelta
 from mro_stock_module import MROStockManager
 from cm_parts_integration import CMPartsIntegration
+from efficiency_manager import EfficiencyManager
 from database_utils import db_pool, UserManager, AuditLogger, OptimisticConcurrencyControl, TransactionManager
 from kpi_database_migration import migrate_kpi_database
 from kpi_manager import KPIManager
@@ -5740,6 +5741,7 @@ class AITCMMSSystem:
         self.init_database()
         self.mro_manager = MROStockManager(self)
         self.parts_integration = CMPartsIntegration(self)
+        self.efficiency_manager = EfficiencyManager(None, self.user_name)  # notebook will be set in create_efficiency_tab
         self.init_pm_templates_database()
 
         # Initialize KPI system for managers
@@ -8556,6 +8558,8 @@ class AITCMMSSystem:
         self.create_custom_pm_templates_tab()
         self.mro_manager.create_mro_tab(self.notebook)
         self.create_kpi_tab()  # KPI Dashboard for managers only
+        self.efficiency_manager.notebook = self.notebook
+        self.efficiency_manager.create_efficiency_tab()  # Efficiency Tracking for managers only
 
     def create_technician_tabs(self):
         """Create limited tabs for technician access"""
