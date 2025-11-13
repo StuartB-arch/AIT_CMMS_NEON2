@@ -450,26 +450,38 @@ Data Sources:
                         print(f"DEBUG: {tech_name} - PM Count: {pm_count}, PM Hours: {pm_hours}")
 
                     # Get CM hours and count
-                    # Note: closed_date is TEXT, need to handle comparison carefully
+                    # Note: closed_date is TEXT and may not be populated consistently
+                    # Use closed_date if available, otherwise fall back to updated_date (timestamp)
+                    # Accept both 'Closed' and 'Completed' status values
                     cursor.execute("""
                         SELECT
                             COUNT(*) as cm_count,
                             COALESCE(SUM(COALESCE(labor_hours, 0)), 0) as cm_hours
                         FROM corrective_maintenance
                         WHERE assigned_technician = %s
-                        AND status = 'Closed'
-                        AND closed_date IS NOT NULL
-                        AND closed_date != ''
-                        AND closed_date >= %s
-                        AND closed_date <= %s
-                    """, (tech_name, start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d')))
+                        AND status IN ('Closed', 'Completed')
+                        AND (
+                            (closed_date IS NOT NULL
+                             AND closed_date != ''
+                             AND closed_date >= %s
+                             AND closed_date <= %s)
+                            OR
+                            (closed_date IS NULL OR closed_date = '')
+                            AND DATE(updated_date) >= %s
+                            AND DATE(updated_date) <= %s
+                        )
+                    """, (tech_name, start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'),
+                         start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d')))
 
                     cm_result = cursor.fetchone()
                     cm_hours = float(cm_result['cm_hours']) if cm_result else 0.0
                     cm_count = int(cm_result['cm_count']) if cm_result else 0
 
                     # Debug output - show all techs to see who has/doesn't have CM data
-                    print(f"DEBUG CM: {tech_name} - CM Count: {cm_count}, CM Hours: {cm_hours}")
+                    if cm_count > 0:
+                        print(f"✓ DEBUG CM: {tech_name} - CM Count: {cm_count}, CM Hours: {cm_hours:.2f}")
+                    else:
+                        print(f"✗ DEBUG CM: {tech_name} - No CM data found")
 
                     total_hours = pm_hours + cm_hours
 
@@ -482,18 +494,32 @@ Data Sources:
                         'total_hours': total_hours
                     })
 
+                print(f"\n{'='*60}")
                 print(f"DEBUG: Date range: {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}")
                 print(f"DEBUG: Found {len(tech_data)} technicians")
 
                 # Debug: Check total CM records in database
                 cursor.execute("""
-                    SELECT COUNT(*) as total_cms,
-                           COUNT(CASE WHEN status = 'Closed' THEN 1 END) as closed_cms,
-                           COUNT(CASE WHEN status = 'Closed' AND closed_date IS NOT NULL AND closed_date != '' THEN 1 END) as closed_with_date
+                    SELECT
+                        COUNT(*) as total_cms,
+                        COUNT(CASE WHEN status = 'Closed' THEN 1 END) as closed_cms,
+                        COUNT(CASE WHEN status = 'Completed' THEN 1 END) as completed_cms,
+                        COUNT(CASE WHEN status IN ('Closed', 'Completed')
+                                    AND closed_date IS NOT NULL
+                                    AND closed_date != '' THEN 1 END) as with_closed_date,
+                        COUNT(CASE WHEN status IN ('Closed', 'Completed')
+                                    AND (closed_date IS NULL OR closed_date = '') THEN 1 END) as without_closed_date,
+                        COUNT(CASE WHEN labor_hours > 0 THEN 1 END) as with_labor_hours
                     FROM corrective_maintenance
                 """)
                 cm_stats = cursor.fetchone()
-                print(f"DEBUG: Total CMs in database: {cm_stats['total_cms']}, Closed: {cm_stats['closed_cms']}, Closed with date: {cm_stats['closed_with_date']}")
+                print(f"DEBUG CM Stats:")
+                print(f"  - Total CMs: {cm_stats['total_cms']}")
+                print(f"  - Closed: {cm_stats['closed_cms']}, Completed: {cm_stats['completed_cms']}")
+                print(f"  - With closed_date: {cm_stats['with_closed_date']}")
+                print(f"  - Without closed_date: {cm_stats['without_closed_date']}")
+                print(f"  - With labor_hours: {cm_stats['with_labor_hours']}")
+                print(f"{'='*60}\n")
 
                 return tech_data
 
@@ -586,10 +612,25 @@ Data Sources:
 
     def _generate_visualizations(self, tech_data: List[Dict]):
         """Generate all chart visualizations"""
-        # Clear existing charts
+        # Clear existing charts - properly destroy widgets and clear frames
         for widget in self.canvas_widgets:
-            widget.destroy()
+            try:
+                widget.destroy()
+            except:
+                pass
         self.canvas_widgets.clear()
+
+        # Clear all children from each chart frame to prevent widget stacking
+        for frame_key, frame in self.chart_frames.items():
+            for child in frame.winfo_children():
+                try:
+                    child.destroy()
+                except:
+                    pass
+
+        # Close any matplotlib figures to prevent memory leaks
+        import matplotlib.pyplot as plt
+        plt.close('all')
 
         # Generate each chart
         self._create_efficiency_comparison_chart(tech_data)
