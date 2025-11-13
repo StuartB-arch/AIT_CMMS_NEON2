@@ -12,6 +12,7 @@ from kpi_database_migration import migrate_kpi_database
 from kpi_manager import KPIManager
 from user_management_ui import UserManagementDialog
 from password_change_ui import show_password_change_dialog
+from responsive_utils import ResponsiveManager, make_treeview_responsive, create_responsive_dialog
 # New modular features for enhanced functionality
 from equipment_manager import EquipmentManager
 from backup_manager import BackupManager
@@ -2662,19 +2663,19 @@ class AITCMMSSystem:
     
     def show_closing_sync_dialog(self):
         """Show dialog asking user to confirm database sync on close"""
-    
-        dialog = tk.Toplevel(self.root)
-        dialog.title("Closing Program - Database Sync")
-        dialog.geometry("600x500")
+
+        # Create responsive dialog
+        dialog = create_responsive_dialog(
+            self.root,
+            "Closing Program - Database Sync",
+            width_ratio=0.5,
+            height_ratio=0.5,
+            min_width=600,
+            min_height=500
+        )
         dialog.transient(self.root)
         dialog.grab_set()
-    
-        # Center dialog
-        dialog.update_idletasks()
-        x = (dialog.winfo_screenwidth() // 2) - (600 // 2)
-        y = (dialog.winfo_screenheight() // 2) - (500 // 2)
-        dialog.geometry(f"600x500+{x}+{y}")
-    
+
         result = {"action": "cancel"}  # Default to cancel
     
         # Header
@@ -2886,9 +2887,14 @@ class AITCMMSSystem:
                 report += f"  - Expected catch-up time: {math.ceil(never_done/(monthly_capacity + 50))}-{math.ceil(never_done/(monthly_capacity + 100))} months\n\n"
         
             # Show in dialog
-            dialog = tk.Toplevel(self.root)
-            dialog.title("PM Capacity Analysis")
-            dialog.geometry("800x600")
+            dialog = create_responsive_dialog(
+                self.root,
+                "PM Capacity Analysis",
+                width_ratio=0.6,
+                height_ratio=0.6,
+                min_width=800,
+                min_height=600
+            )
             
             text_frame = ttk.Frame(dialog)
             text_frame.pack(fill='both', expand=True, padx=10, pady=10)
@@ -5709,6 +5715,21 @@ class AITCMMSSystem:
             except:
                 # If all else fails, just make it fill the screen
                 self.root.geometry(f"{screen_width}x{screen_height}+0+0")
+
+        # ===== RESPONSIVE DESIGN MANAGER =====
+        # Initialize responsive manager for dynamic sizing across different screen sizes
+        self.responsive_manager = ResponsiveManager(self.root)
+
+        # Set minimum window size to prevent too-small layouts
+        self.root.minsize(1024, 768)
+
+        # Add window resize event handler
+        def on_window_resize(event):
+            """Handle window resize events to update responsive manager"""
+            if event.widget == self.root:
+                self.responsive_manager.update_dimensions(event.width, event.height)
+
+        self.root.bind('<Configure>', on_window_resize)
 
         # ===== ROLE-BASED ACCESS CONTROL =====
         self.current_user_role = None  # Will be set by login
@@ -8960,6 +8981,20 @@ class AITCMMSSystem:
         list_frame.grid_rowconfigure(0, weight=1)
         list_frame.grid_columnconfigure(0, weight=1)
 
+        # Make equipment tree responsive
+        column_weights = {
+            'SAP': 0.10,
+            'BFM': 0.12,
+            'Description': 0.30,
+            'Location': 0.12,
+            'LIN': 0.08,
+            'Monthly': 0.08,
+            'Six Month': 0.08,
+            'Annual': 0.08,
+            'Status': 0.04
+        }
+        make_treeview_responsive(self.equipment_tree, list_frame, column_weights)
+
         # Initialize equipment data on tab creation
         self.refresh_equipment_list()
 
@@ -9258,14 +9293,24 @@ class AITCMMSSystem:
         self.recent_completions_tree = ttk.Treeview(recent_frame,
                                                   columns=('Date', 'BFM', 'PM Type', 'Technician', 'Hours'),
                                                   show='headings')
-        
+
         for col in ('Date', 'BFM', 'PM Type', 'Technician', 'Hours'):
             self.recent_completions_tree.heading(col, text=col)
             self.recent_completions_tree.column(col, width=120)
-        
+
         self.recent_completions_tree.pack(fill='both', expand=True)
         self.recent_completions_tree.bind('<Double-1>', self.on_completion_double_click)
         self.recent_completions_tree.bind('<<TreeviewSelect>>', self.on_completion_select)
+
+        # Make PM completions tree responsive
+        pm_column_weights = {
+            'Date': 0.20,
+            'BFM': 0.20,
+            'PM Type': 0.20,
+            'Technician': 0.25,
+            'Hours': 0.15
+        }
+        make_treeview_responsive(self.recent_completions_tree, recent_frame, pm_column_weights)
         
         # Load recent completions
         self.load_recent_completions()
@@ -10389,10 +10434,23 @@ class AITCMMSSystem:
 
         cm_list_frame.grid_rowconfigure(0, weight=1)
         cm_list_frame.grid_columnconfigure(0, weight=1)
-        
+
+        # Make CM tree responsive
+        cm_column_weights = {
+            'CM Number': 0.10,
+            'BFM': 0.12,
+            'Description': 0.28,
+            'Priority': 0.08,
+            'Assigned': 0.15,
+            'Status': 0.10,
+            'Created': 0.10,
+            'Source': 0.07
+        }
+        make_treeview_responsive(self.cm_tree, cm_list_frame, cm_column_weights)
+
         # Initialize filter data storage
         self.cm_original_data = []
-        
+
         # Load CM data
         self.load_corrective_maintenance_with_filter()
 

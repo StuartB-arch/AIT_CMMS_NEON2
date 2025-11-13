@@ -24,6 +24,7 @@ from matplotlib.figure import Figure
 import matplotlib.pyplot as plt
 from typing import Dict, List, Tuple, Optional
 import calendar
+from responsive_utils import calculate_chart_size_for_multi_chart_layout, make_treeview_responsive
 
 
 class EfficiencyManager:
@@ -229,6 +230,21 @@ class EfficiencyManager:
         self.tech_tree.column('status', width=120, anchor='center')
 
         self.tech_tree.pack(fill='both', expand=True)
+
+        # Make technician tree responsive
+        tech_column_weights = {
+            'technician': 0.15,
+            'available_hrs': 0.10,
+            'pm_hrs': 0.09,
+            'cm_hrs': 0.09,
+            'total_hrs': 0.09,
+            'pm_count': 0.08,
+            'cm_count': 0.08,
+            'efficiency': 0.10,
+            'vs_target': 0.10,
+            'status': 0.12
+        }
+        make_treeview_responsive(self.tech_tree, tree_container, tech_column_weights)
 
         # Add row coloring for status
         self.tech_tree.tag_configure('above_target', background='#d4edda')
@@ -552,7 +568,12 @@ Data Sources:
         # Sort by efficiency
         sorted_data = sorted(tech_data, key=lambda x: x['efficiency'], reverse=True)
 
-        fig = Figure(figsize=(8, 4.5), dpi=100)
+        # Get responsive chart size for multi-chart layout (4 charts total)
+        screen_width = frame.winfo_screenwidth()
+        screen_height = frame.winfo_screenheight()
+        figsize = calculate_chart_size_for_multi_chart_layout(screen_width, screen_height, num_charts=4)
+
+        fig = Figure(figsize=figsize, dpi=100)
         ax = fig.add_subplot(111)
 
         technicians = [t['technician'] for t in sorted_data]
@@ -603,7 +624,12 @@ Data Sources:
         # Sort by total hours
         sorted_data = sorted(tech_data, key=lambda x: x['total_hours'], reverse=True)
 
-        fig = Figure(figsize=(8, 4.5), dpi=100)
+        # Get responsive chart size for multi-chart layout (4 charts total)
+        screen_width = frame.winfo_screenwidth()
+        screen_height = frame.winfo_screenheight()
+        figsize = calculate_chart_size_for_multi_chart_layout(screen_width, screen_height, num_charts=4)
+
+        fig = Figure(figsize=figsize, dpi=100)
         ax = fig.add_subplot(111)
 
         technicians = [t['technician'] for t in sorted_data]
@@ -641,7 +667,12 @@ Data Sources:
         """Create pie chart showing workload distribution"""
         frame = self.chart_frames['workload_distribution']
 
-        fig = Figure(figsize=(8, 4.5), dpi=100)
+        # Get responsive chart size for multi-chart layout (4 charts total)
+        screen_width = frame.winfo_screenwidth()
+        screen_height = frame.winfo_screenheight()
+        figsize = calculate_chart_size_for_multi_chart_layout(screen_width, screen_height, num_charts=4)
+
+        fig = Figure(figsize=figsize, dpi=100)
 
         # Create two subplots - one for hours, one for task count
         ax1 = fig.add_subplot(121)
@@ -674,7 +705,12 @@ Data Sources:
         """Create chart showing efficiency vs target"""
         frame = self.chart_frames['trend_analysis']
 
-        fig = Figure(figsize=(8, 4.5), dpi=100)
+        # Get responsive chart size for multi-chart layout (4 charts total)
+        screen_width = frame.winfo_screenwidth()
+        screen_height = frame.winfo_screenheight()
+        figsize = calculate_chart_size_for_multi_chart_layout(screen_width, screen_height, num_charts=4)
+
+        fig = Figure(figsize=figsize, dpi=100)
         ax = fig.add_subplot(111)
 
         # Sort by technician name for consistent display

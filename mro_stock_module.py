@@ -13,6 +13,7 @@ import shutil
 import csv
 import io
 from database_utils import db_pool
+from responsive_utils import make_treeview_responsive
 
 class MROStockManager:
     """MRO (Maintenance, Repair, Operations) Stock Management"""
@@ -335,7 +336,23 @@ class MROStockManager:
         
         list_frame.grid_rowconfigure(0, weight=1)
         list_frame.grid_columnconfigure(0, weight=1)
-        
+
+        # Make MRO tree responsive
+        mro_column_weights = {
+            'Part Number': 0.10,
+            'Name': 0.20,
+            'Model': 0.10,
+            'Equipment': 0.12,
+            'System': 0.10,
+            'Qty': 0.06,
+            'Min Stock': 0.08,
+            'Unit': 0.05,
+            'Price': 0.08,
+            'Location': 0.08,
+            'Status': 0.03
+        }
+        make_treeview_responsive(self.mro_tree, list_frame, mro_column_weights)
+
         # Double-click to view details
         self.mro_tree.bind('<Double-1>', lambda e: self.view_part_details())
         
