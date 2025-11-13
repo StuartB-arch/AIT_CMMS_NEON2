@@ -6041,7 +6041,8 @@ class AITCMMSSystem:
                 cursor.execute('''
                     UPDATE corrective_maintenance
                     SET status = 'Closed',
-                        completion_date = %s,
+                        closed_date = %s,
+                        closed_by = %s,
                         labor_hours = %s,
                         root_cause = %s,
                         corrective_action = %s,
@@ -6049,6 +6050,7 @@ class AITCMMSSystem:
                     WHERE cm_number = %s
                 ''', (
                     form_values['completion_date'],
+                    self.user_name,
                     form_values['labor_hours'],
                     form_values['root_cause'],
                     form_values['corrective_action'],
@@ -8469,6 +8471,20 @@ class AITCMMSSystem:
             ''')
 
             print("CHECK: Performance indexes created successfully!")
+
+            # === DATA MIGRATION: Fix existing closed CMs without closed_date ===
+            # This is a one-time migration to populate closed_date for existing closed CMs
+            print("CHECK: Running data migration for closed CM dates...")
+            cursor.execute("""
+                UPDATE corrective_maintenance
+                SET closed_date = created_date::date::text
+                WHERE status = 'Closed'
+                AND (closed_date IS NULL OR closed_date = '')
+                AND created_date IS NOT NULL
+            """)
+            migrated_count = cursor.rowcount
+            if migrated_count > 0:
+                print(f"CHECK: Migrated {migrated_count} closed CMs to have closed_date set to their created_date")
 
             self.conn.commit()
             cursor.close()
@@ -13282,7 +13298,8 @@ class AITCMMSSystem:
                 cursor.execute('''
                     UPDATE corrective_maintenance
                     SET status = 'Closed',
-                        completion_date = %s,
+                        closed_date = %s,
+                        closed_by = %s,
                         labor_hours = %s,
                         root_cause = %s,
                         corrective_action = %s,
@@ -13290,6 +13307,7 @@ class AITCMMSSystem:
                     WHERE cm_number = %s
                 ''', (
                     form_values['completion_date'],
+                    self.user_name,
                     form_values['labor_hours'],
                     form_values['root_cause'],
                     form_values['corrective_action'],
