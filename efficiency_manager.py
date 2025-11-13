@@ -391,19 +391,24 @@ Data Sources:
 
                 for tech_name in technicians:
                     # Get PM hours and count
+                    # Note: dates are stored as TEXT in format YYYY-MM-DD
                     cursor.execute("""
                         SELECT
                             COUNT(*) as pm_count,
                             COALESCE(SUM(COALESCE(labor_hours, 0) + COALESCE(labor_minutes, 0)/60.0), 0) as pm_hours
                         FROM pm_completions
                         WHERE technician_name = %s
-                        AND completion_date::date >= %s
-                        AND completion_date::date <= %s
-                    """, (tech_name, start_date.date(), end_date.date()))
+                        AND completion_date >= %s
+                        AND completion_date <= %s
+                    """, (tech_name, start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d')))
 
                     pm_result = cursor.fetchone()
                     pm_hours = float(pm_result['pm_hours']) if pm_result else 0.0
                     pm_count = int(pm_result['pm_count']) if pm_result else 0
+
+                    # Debug output
+                    if pm_count > 0:
+                        print(f"DEBUG: {tech_name} - PM Count: {pm_count}, PM Hours: {pm_hours}")
 
                     # Get CM hours and count
                     cursor.execute("""
@@ -413,13 +418,17 @@ Data Sources:
                         FROM corrective_maintenance
                         WHERE assigned_technician = %s
                         AND status = 'Closed'
-                        AND closed_date::date >= %s
-                        AND closed_date::date <= %s
-                    """, (tech_name, start_date.date(), end_date.date()))
+                        AND closed_date >= %s
+                        AND closed_date <= %s
+                    """, (tech_name, start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d')))
 
                     cm_result = cursor.fetchone()
                     cm_hours = float(cm_result['cm_hours']) if cm_result else 0.0
                     cm_count = int(cm_result['cm_count']) if cm_result else 0
+
+                    # Debug output
+                    if cm_count > 0:
+                        print(f"DEBUG: {tech_name} - CM Count: {cm_count}, CM Hours: {cm_hours}")
 
                     total_hours = pm_hours + cm_hours
 
@@ -432,6 +441,8 @@ Data Sources:
                         'total_hours': total_hours
                     })
 
+                print(f"DEBUG: Date range: {start_date.strftime('%Y-%m-%d')} to {end_date.strftime('%Y-%m-%d')}")
+                print(f"DEBUG: Found {len(tech_data)} technicians")
                 return tech_data
 
         except Exception as e:
@@ -541,7 +552,7 @@ Data Sources:
         # Sort by efficiency
         sorted_data = sorted(tech_data, key=lambda x: x['efficiency'], reverse=True)
 
-        fig = Figure(figsize=(10, 6), dpi=100)
+        fig = Figure(figsize=(8, 4.5), dpi=100)
         ax = fig.add_subplot(111)
 
         technicians = [t['technician'] for t in sorted_data]
@@ -592,7 +603,7 @@ Data Sources:
         # Sort by total hours
         sorted_data = sorted(tech_data, key=lambda x: x['total_hours'], reverse=True)
 
-        fig = Figure(figsize=(10, 6), dpi=100)
+        fig = Figure(figsize=(8, 4.5), dpi=100)
         ax = fig.add_subplot(111)
 
         technicians = [t['technician'] for t in sorted_data]
@@ -630,7 +641,7 @@ Data Sources:
         """Create pie chart showing workload distribution"""
         frame = self.chart_frames['workload_distribution']
 
-        fig = Figure(figsize=(10, 6), dpi=100)
+        fig = Figure(figsize=(8, 4.5), dpi=100)
 
         # Create two subplots - one for hours, one for task count
         ax1 = fig.add_subplot(121)
@@ -663,7 +674,7 @@ Data Sources:
         """Create chart showing efficiency vs target"""
         frame = self.chart_frames['trend_analysis']
 
-        fig = Figure(figsize=(10, 6), dpi=100)
+        fig = Figure(figsize=(8, 4.5), dpi=100)
         ax = fig.add_subplot(111)
 
         # Sort by technician name for consistent display
